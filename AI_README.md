@@ -2,6 +2,8 @@
 
 Context for humans and coding assistants continuing this project.
 
+**Live site:** [https://talrme.github.io/babysitter-club](https://talrme.github.io/babysitter-club)
+
 ## What this is
 
 A **static site** (no bundler): `index.html`, `styles.css`, `script.js`, plus Firebase config. Goal is a babysitting coordination app: **Google sign-in**, optional **two-person households**, **household-to-household connections** (bidirectional accepts), **requests** with visibility controls, **calendar** layers, **multi-option dates** (up to five slots; first fill wins), settings/themes, mobile-first.
@@ -32,7 +34,7 @@ A **static site** (no bundler): `index.html`, `styles.css`, `script.js`, plus Fi
 cd babysitter-club && python3 -m http.server 8080
 ```
 
-Open **http://localhost:8080**. Ensure **localhost** is an **Authorized domain** in Firebase Authentication settings.
+Open **http://localhost:8080**. Ensure `localhost`, `127.0.0.1`, and `talrme.github.io` are listed as **Authorized domains** in Firebase Authentication settings.
 
 ## Firebase setup (click-by-click)
 
@@ -46,7 +48,7 @@ If you are new to Firebase, do this exactly:
 6. Open **Authentication → Settings → Authorized domains** and add:
    - `localhost`
    - `127.0.0.1`
-   - your GitHub Pages domain (for example: `talg.github.io`)
+   - `talrme.github.io`
 7. Run locally:
 
 ```bash
@@ -54,6 +56,7 @@ cd babysitter-club && python3 -m http.server 8080
 ```
 
 8. Open `http://localhost:8080` and click **Sign in with Google**.
+9. Open [https://talrme.github.io/babysitter-club](https://talrme.github.io/babysitter-club) and verify sign-in also works there.
 
 If `firebase-config.js` has an empty `apiKey`, the setup hint/checklist appears and the sign-in button stays hidden.
 
@@ -69,8 +72,8 @@ This app is compatible with GitHub Pages because it is static HTML/CSS/JS.
 
 1. Push this folder to a GitHub repo.
 2. In GitHub repo settings, enable **Pages** from your chosen branch/folder.
-3. Confirm the live URL (for example `https://talg.github.io/babysitter-club/`).
-4. Add that domain (`talg.github.io`) to Firebase authorized domains.
+3. Confirm the live URL is [https://talrme.github.io/babysitter-club](https://talrme.github.io/babysitter-club).
+4. Ensure `talrme.github.io` is in Firebase authorized domains.
 5. Re-test sign-in on the live Pages URL.
 
 ## Product rules (target behavior — encode in Firestore + UI later)
