@@ -33,7 +33,127 @@
         <section id="signed-in-panel" class="panel" hidden>
             <h1>Welcome</h1>
             <p class="muted">Signed in as <strong id="user-label"></strong></p>
-            <p class="muted small">Households will be limited to <strong>two</strong> linked accounts. Connections and requests come next.</p>
+            <p class="muted small">Scroll to manage requests, club members, and household connections.</p>
+        </section>
+
+        <nav id="app-nav" class="panel app-nav" hidden>
+            <a href="#my-requests">My Requests</a>
+            <a href="#upcoming-babysits">Upcoming Babysits</a>
+            <a href="#club-requests">Others' Requests</a>
+            <a href="#my-club">My Babysitter Club</a>
+            <a href="#my-household">My Household</a>
+        </nav>
+
+        <section id="my-requests" class="panel app-section" hidden>
+            <div class="section-head">
+                <h2>My Requests</h2>
+                <button type="button" id="btn-new-request" class="btn btn-primary">New Request</button>
+            </div>
+            <div id="my-requests-list" class="list-stack"></div>
+            <button type="button" id="btn-toggle-my-old" class="btn btn-ghost btn-small">Show old requests</button>
+        </section>
+
+        <section id="upcoming-babysits" class="panel app-section" hidden>
+            <h2>Upcoming Babysits</h2>
+            <p id="upcoming-empty" class="empty-state">None yet. Your future free date nights are stretching and warming up.</p>
+            <div id="upcoming-list" class="list-stack" hidden></div>
+        </section>
+
+        <section id="club-requests" class="panel app-section" hidden>
+            <h2>Others' Requests</h2>
+            <div id="others-requests-list" class="list-stack"></div>
+            <button type="button" id="btn-toggle-others-old" class="btn btn-ghost btn-small">Show older requests</button>
+        </section>
+
+        <section id="my-club" class="panel app-section" hidden>
+            <div class="section-head">
+                <h2>My Babysitter Club</h2>
+                <div class="inline-actions">
+                    <button type="button" id="btn-add-people" class="btn btn-ghost btn-small">Add People to My Club</button>
+                    <button type="button" id="btn-invite-link" class="btn btn-ghost btn-small">Invite Someone New</button>
+                </div>
+            </div>
+            <div id="club-members-list" class="member-grid"></div>
+            <p id="club-invites-note" class="muted small"></p>
+            <h3 class="subhead">Pending sent invites</h3>
+            <div id="outgoing-club-invites" class="list-stack"></div>
+            <h3 class="subhead">Invites waiting for me</h3>
+            <div id="incoming-club-invites" class="list-stack"></div>
+        </section>
+
+        <section id="my-household" class="panel app-section" hidden>
+            <div class="section-head">
+                <h2>My Household</h2>
+                <button type="button" id="btn-household-action" class="btn btn-ghost btn-small">Add my parenting partner / lover / spouse</button>
+            </div>
+            <p id="household-status" class="muted"></p>
+            <div id="incoming-household-invites" class="list-stack"></div>
+            <button type="button" id="btn-remove-partner" class="btn btn-ghost btn-small" hidden>Remove household partner</button>
+        </section>
+
+        <section id="request-modal" class="modal" hidden>
+            <div class="modal-backdrop" data-close="request-modal"></div>
+            <div class="modal-card">
+                <h3 id="request-modal-title">Request details</h3>
+                <p id="request-modal-meta" class="muted small"></p>
+                <p id="request-modal-details" class="muted"></p>
+                <button type="button" class="btn btn-ghost btn-small" data-close="request-modal">Close</button>
+            </div>
+        </section>
+
+        <section id="new-request-modal" class="modal" hidden>
+            <div class="modal-backdrop" data-close="new-request-modal"></div>
+            <form id="new-request-form" class="modal-card modal-form">
+                <h3>Create new request</h3>
+                <label>
+                    Title
+                    <input id="new-request-title" name="title" required maxlength="80" />
+                </label>
+                <label>
+                    Date and time
+                    <input id="new-request-when" name="when" type="datetime-local" required />
+                </label>
+                <label>
+                    Details
+                    <textarea id="new-request-details" name="details" rows="4" maxlength="400" required></textarea>
+                </label>
+                <div class="inline-actions">
+                    <button type="submit" class="btn btn-primary">Create request</button>
+                    <button type="button" class="btn btn-ghost btn-small" data-close="new-request-modal">Cancel</button>
+                </div>
+            </form>
+        </section>
+
+        <section id="add-people-modal" class="modal" hidden>
+            <div class="modal-backdrop" data-close="add-people-modal"></div>
+            <div class="modal-card">
+                <h3>Add people to my club</h3>
+                <p class="muted small">Ordered by how connected they already are to your club.</p>
+                <div id="add-people-list" class="list-stack"></div>
+                <button type="button" class="btn btn-ghost btn-small" data-close="add-people-modal">Close</button>
+            </div>
+        </section>
+
+        <section id="household-modal" class="modal" hidden>
+            <div class="modal-backdrop" data-close="household-modal"></div>
+            <div class="modal-card">
+                <h3>Choose your household partner</h3>
+                <p class="muted small">Send one request; they must accept to link households.</p>
+                <div id="household-candidate-list" class="list-stack"></div>
+                <button type="button" class="btn btn-ghost btn-small" data-close="household-modal">Close</button>
+            </div>
+        </section>
+
+        <section id="remove-club-modal" class="modal" hidden>
+            <div class="modal-backdrop" data-close="remove-club-modal"></div>
+            <div class="modal-card">
+                <h3>Remove from club?</h3>
+                <p class="muted">Are you sure? This person will no longer receive notifications from your requests.</p>
+                <div class="inline-actions">
+                    <button type="button" id="btn-confirm-remove-club" class="btn btn-primary">Yes, remove</button>
+                    <button type="button" class="btn btn-ghost btn-small" data-close="remove-club-modal">Cancel</button>
+                </div>
+            </div>
         </section>
     </main>
     <script type="module" src="script.js"></script>

@@ -6,13 +6,17 @@ Babysitter Club is a static web app (no bundler) for coordinating babysitting wi
 - Google sign-in
 - two-person households
 - household-to-household connections
-- request scheduling with calendar views
+- section-based signed-in app navigation (`My Requests`, `Upcoming Babysits`, `Others' Requests`, `My Club`, `My Household`)
+- modal-driven request creation/details
+- club invite send/accept flows with pending-invite dedupe
+- household invite/accept flow with merged club networks
 
 ## Project files
 
 - `index.html` — app shell and auth UI
 - `styles.css` — app styling
 - `script.js` — Firebase auth wiring and UI state
+- `firebase.js` — shared Firebase app/auth/firestore initialization
 - `firebase-config.js` — your Firebase web config values
 - `firebase-config.example.js` — config template
 

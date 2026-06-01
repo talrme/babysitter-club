@@ -6,11 +6,11 @@ Context for humans and coding assistants continuing this project.
 
 ## What this is
 
-A **static site** (no bundler): `index.html`, `styles.css`, `script.js`, plus Firebase config. Goal is a babysitting coordination app: **Google sign-in**, optional **two-person households**, **household-to-household connections** (bidirectional accepts), **requests** with visibility controls, **calendar** layers, **multi-option dates** (up to five slots; first fill wins), settings/themes, mobile-first.
+A **static site** (no bundler): `index.html`, `styles.css`, `script.js`, plus Firebase config. Goal is a babysitting coordination app: **Google sign-in**, optional **two-person households**, **household-to-household connections** (bidirectional accepts), and section-based flows for **my requests**, **others' requests**, **club management**, and **household linking**.
 
-**Implemented today:** Firebase Auth with **Google** (`signInWithPopup`), header auth UI, placeholder welcome panel when signed in, and basic Firestore user profile sync (`users/{uid}`).
+**Implemented today:** Firebase Auth with **Google** (`signInWithPopup`), Firestore user profile sync (`users/{uid}`), section-based signed-in navigation, request modals, club invite send/accept flow (with pending dedupe), and household invite/link flow.
 
-**Not implemented yet:** household model, connections, requests, calendar modals, and production security rules.
+**Not implemented yet:** production-grade Firestore security rules, full booking lifecycle, notifications, and polished invitation/onboarding flows.
 
 ## Stack
 
@@ -23,8 +23,8 @@ A **static site** (no bundler): `index.html`, `styles.css`, `script.js`, plus Fi
 | File | Role |
 |------|------|
 | `index.html` | Shell, auth bar, setup hint, signed-in panel |
-| `styles.css` | Layout, CSS variables (`--bg`, `--accent`, …) |
-| `script.js` | Auth UI handlers plus profile sync on sign-in |
+| `styles.css` | Modernized visual system, section layouts, cards, and modal styling |
+| `script.js` | Auth handlers, profile sync, requests/club/household Firestore reads and actions |
 | `firebase.js` | Shared Firebase app/auth/firestore initialization |
 | `firebase-config.js` | **`firebaseConfig` export** — user fills from Firebase Console (often gitignored in real repos; here may be empty placeholders) |
 | `firebase-config.example.js` | Shape of config for copy/paste |
@@ -80,7 +80,7 @@ This app is compatible with GitHub Pages because it is static HTML/CSS/JS.
 ## Product rules (target behavior — encode in Firestore + UI later)
 
 - **Household:** exactly **two** linked accounts; linking requires **mutual confirmation**; either member’s actions visible to the household as agreed in UX (mirror requirements when implementing).
-- **Connections:** households create link requests; **both accept** → mutual connection. Requests can default to connected households or use per-request allowlists.
+- **Connections:** users can send/accept club invites; households can send/accept household-link invites.
 - **Requests:** modal for date/time/details; optional **up to five** candidate slots; when one slot is **filled**, treat request as booked and **void** other slots.
 
 ## Conventions for future changes
