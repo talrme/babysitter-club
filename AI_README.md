@@ -8,9 +8,9 @@ Context for humans and coding assistants continuing this project.
 
 A **static site** (no bundler): `index.html`, `styles.css`, `script.js`, plus Firebase config. Goal is a babysitting coordination app: **Google sign-in**, optional **two-person households**, **household-to-household connections** (bidirectional accepts), **requests** with visibility controls, **calendar** layers, **multi-option dates** (up to five slots; first fill wins), settings/themes, mobile-first.
 
-**Implemented today:** Firebase Auth with **Google** (`signInWithPopup`), header auth UI, placeholder welcome panel when signed in.
+**Implemented today:** Firebase Auth with **Google** (`signInWithPopup`), header auth UI, placeholder welcome panel when signed in, and basic Firestore user profile sync (`users/{uid}`).
 
-**Not implemented yet:** Firestore, households, connections, requests, calendar modals, security rules.
+**Not implemented yet:** household model, connections, requests, calendar modals, and production security rules.
 
 ## Stack
 
@@ -24,7 +24,8 @@ A **static site** (no bundler): `index.html`, `styles.css`, `script.js`, plus Fi
 |------|------|
 | `index.html` | Shell, auth bar, setup hint, signed-in panel |
 | `styles.css` | Layout, CSS variables (`--bg`, `--accent`, …) |
-| `script.js` | Firebase init, `onAuthStateChanged`, sign-in/out handlers |
+| `script.js` | Auth UI handlers plus profile sync on sign-in |
+| `firebase.js` | Shared Firebase app/auth/firestore initialization |
 | `firebase-config.js` | **`firebaseConfig` export** — user fills from Firebase Console (often gitignored in real repos; here may be empty placeholders) |
 | `firebase-config.example.js` | Shape of config for copy/paste |
 

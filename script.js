@@ -1,14 +1,20 @@
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js';
 import {
-    getAuth,
-    GoogleAuthProvider,
     signInWithPopup,
     signOut,
     onAuthStateChanged,
 } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js';
-import { firebaseConfig } from './firebase-config.js';
-
-const missingConfig = typeof firebaseConfig?.apiKey !== 'string' || firebaseConfig.apiKey.length === 0;
+import {
+    doc,
+    getDoc,
+    serverTimestamp,
+    setDoc,
+} from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
+import {
+    auth,
+    createGoogleProvider,
+    db,
+    missingConfig,
+} from './firebase.js';
 
 const setupHint = document.getElementById('setup-hint');
 const setupGuide = document.getElementById('setup-guide');
@@ -31,9 +37,12 @@ function showSignedOut() {
     signedInPanel.hidden = true;
 }
 
-function showSignedIn(user) {
+function showSignedIn(user, options = {}) {
+    const { preserveStatus = false } = options;
     const name = user.displayName || user.email || user.uid;
-    authStatus.textContent = '';
+    if (!preserveStatus) {
+        authStatus.textContent = '';
+    }
     btnSignIn.hidden = true;
     btnSignOut.hidden = false;
     userLabel.textContent = name;
@@ -55,6 +64,37 @@ function getAuthErrorMessage(err) {
     }
 }
 
+async function ensureUserProfile(user) {
+    if (!db) {
+        return;
+    }
+
+    const userRef = doc(db, 'users', user.uid);
+    const existing = await getDoc(userRef);
+
+    if (existing.exists()) {
+        await setDoc(userRef, {
+            displayName: user.displayName || '',
+            email: user.email || '',
+            photoURL: user.photoURL || '',
+            lastLoginAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+        }, { merge: true });
+        return;
+    }
+
+    await setDoc(userRef, {
+        uid: user.uid,
+        displayName: user.displayName || '',
+        email: user.email || '',
+        photoURL: user.photoURL || '',
+        createdAt: serverTimestamp(),
+        lastLoginAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        notificationPreference: 'instant',
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     if (missingConfig) {
         setupHint.hidden = false;
@@ -63,14 +103,19 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
+    const provider = createGoogleProvider();
 
-    onAuthStateChanged(auth, (user) => {
+    onAuthStateChanged(auth, async (user) => {
         if (user) {
-            showSignedIn(user);
+            let profileSyncFailed = false;
+            try {
+                await ensureUserProfile(user);
+            } catch (err) {
+                console.error('Failed to sync user profile:', err);
+                authStatus.textContent = 'Signed in, but profile sync failed. Please refresh.';
+                profileSyncFailed = true;
+            }
+            showSignedIn(user, { preserveStatus: profileSyncFailed });
         } else {
             showSignedOut();
         }
