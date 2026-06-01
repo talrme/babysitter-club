@@ -1,0 +1,129 @@
+* {
+    box-sizing: border-box;
+}
+
+:root {
+    --bg: #f6f4f1;
+    --surface: #fff;
+    --text: #1a1a1a;
+    --muted: #5c5c5c;
+    --accent: #2d6a4f;
+    --accent-hover: #1b4332;
+    --border: #e0dcd4;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+}
+
+.site-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 0.75rem 1.25rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+}
+
+.logo {
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+
+.auth-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.auth-status {
+    font-size: 0.875rem;
+    color: var(--muted);
+    max-width: 12rem;
+}
+
+.btn {
+    font: inherit;
+    cursor: pointer;
+    border-radius: 8px;
+    padding: 0.45rem 0.85rem;
+    border: 1px solid transparent;
+}
+
+.btn-primary {
+    background: var(--accent);
+    color: #fff;
+}
+
+.btn-primary:hover {
+    background: var(--accent-hover);
+}
+
+.btn-ghost {
+    background: transparent;
+    border-color: var(--border);
+    color: var(--text);
+}
+
+.btn-ghost:hover {
+    background: var(--bg);
+}
+
+#app {
+    padding: 1.25rem;
+    max-width: 40rem;
+}
+
+.setup-hint {
+    background: #fff8e6;
+    border: 1px solid #e6d9a3;
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    font-size: 0.9rem;
+}
+
+.setup-hint code {
+    font-size: 0.85em;
+}
+
+.panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+}
+
+.panel h1 {
+    margin: 0 0 0.5rem;
+    font-size: 1.35rem;
+    font-weight: 600;
+}
+
+.setup-guide h2 {
+    margin: 0 0 0.65rem;
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+
+.setup-guide ol {
+    margin: 0.25rem 0 0.85rem 1.25rem;
+    padding: 0;
+    display: grid;
+    gap: 0.45rem;
+}
+
+.muted {
+    color: var(--muted);
+    margin: 0.35rem 0;
+}
+
+.muted.small {
+    font-size: 0.875rem;
+}

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Babysitter Club</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header class="site-header">
+        <span class="logo">Babysitter Club</span>
+        <div id="auth-bar" class="auth-bar" aria-live="polite">
+            <span id="auth-status" class="auth-status"></span>
+            <button type="button" id="btn-sign-in" class="btn btn-primary" hidden>Sign in with Google</button>
+            <button type="button" id="btn-sign-out" class="btn btn-ghost" hidden>Sign out</button>
+        </div>
+    </header>
+    <main id="app">
+        <p id="setup-hint" class="setup-hint" hidden>
+            Add your Firebase web config to <code>firebase-config.js</code> (see <code>firebase-config.example.js</code>).
+        </p>
+        <section id="setup-guide" class="panel setup-guide" hidden>
+            <h2>Firebase setup checklist</h2>
+            <ol>
+                <li>Create a Firebase project and add a <strong>Web app</strong>.</li>
+                <li>Copy the config object into <code>firebase-config.js</code>.</li>
+                <li>Enable <strong>Authentication → Sign-in method → Google</strong>.</li>
+                <li>Add authorized domains: <code>localhost</code>, <code>127.0.0.1</code>, and your GitHub Pages domain.</li>
+                <li>Run this app with a local server (not <code>file://</code>), then click sign in.</li>
+            </ol>
+            <p class="muted small">Detailed instructions are in <code>AI_README.md</code>.</p>
+        </section>
+        <section id="signed-in-panel" class="panel" hidden>
+            <h1>Welcome</h1>
+            <p class="muted">Signed in as <strong id="user-label"></strong></p>
+            <p class="muted small">Households will be limited to <strong>two</strong> linked accounts. Connections and requests come next.</p>
+        </section>
+    </main>
+    <script type="module" src="script.js"></script>
+</body>
+</html>
