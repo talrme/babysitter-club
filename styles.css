@@ -159,6 +159,18 @@ body {
     font-size: 0.875rem;
 }
 
+.admin-badge {
+    display: inline-block;
+    margin: 0.15rem 0 0.25rem;
+    background: #ede9fe;
+    color: #5b21b6;
+    border: 1px solid #ddd6fe;
+    border-radius: 999px;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
 .app-nav {
     display: flex;
     gap: 0.7rem;
@@ -223,15 +235,149 @@ body {
     display: grid;
     gap: 0.3rem;
     cursor: pointer;
+    position: relative;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .request-row:hover {
     border-color: var(--accent);
 }
 
+.request-row.status-accepted {
+    border-color: #65a30d;
+    background: #f7fee7;
+}
+
+.request-row.status-completed,
+.request-row.status-closed,
+.request-row.status-superseded {
+    opacity: 0.8;
+}
+
+.request-row.or-linked-highlight {
+    border-color: var(--or-border, #8b5cf6);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--or-border, #8b5cf6) 30%, transparent);
+}
+
+.request-row.or-linked-other {
+    background: var(--or-bg, #faf5ff);
+    transform: translateX(3px);
+    border-style: dashed;
+}
+
+.request-row.or-linked-source {
+    transform: translateY(-1px);
+    box-shadow:
+        0 0 0 2px color-mix(in srgb, var(--or-border, #8b5cf6) 36%, transparent),
+        0 10px 24px color-mix(in srgb, var(--or-border, #8b5cf6) 28%, transparent);
+}
+
+.request-title-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+}
+
+.request-pill-group {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
 .request-title {
     margin: 0;
     font-weight: 600;
+}
+
+.status-pill {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-radius: 999px;
+    padding: 0.15rem 0.45rem;
+    border: 1px solid var(--border);
+}
+
+.status-pill.status-open {
+    color: #1d4ed8;
+    border-color: #bfdbfe;
+    background: #eff6ff;
+}
+
+.status-pill.status-accepted {
+    color: #3f6212;
+    border-color: #bef264;
+    background: #f7fee7;
+}
+
+.status-pill.status-completed {
+    color: #475569;
+    border-color: #cbd5e1;
+    background: #f8fafc;
+}
+
+.status-pill.status-superseded,
+.status-pill.status-closed {
+    color: #6b7280;
+    border-color: #d1d5db;
+    background: #f9fafb;
+}
+
+.or-pill {
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-radius: 999px;
+    padding: 0.15rem 0.45rem;
+    border: 1px solid var(--border);
+    cursor: help;
+}
+
+.or-hover-popup {
+    position: absolute;
+    top: -0.45rem;
+    right: 0.8rem;
+    transform: translateY(-100%);
+    max-width: 17rem;
+    background: color-mix(in srgb, var(--or-text, #111827) 90%, #0b1020);
+    color: #f9fafb;
+    border-radius: 10px;
+    padding: 0.45rem 0.55rem;
+    font-size: 0.76rem;
+    line-height: 1.35;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease;
+    z-index: 6;
+}
+
+.modal-group-row {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.55rem 0.65rem;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    align-items: center;
+    background: #fff;
+}
+
+.modal-group-row.status-superseded,
+.modal-group-row.status-completed,
+.modal-group-row.status-closed {
+    opacity: 0.58;
+    background: #f8fafc;
+}
+
+.modal-group-meta p {
+    margin: 0.15rem 0;
+}
+
+.request-row.show-or-popup .or-hover-popup {
+    opacity: 1;
 }
 
 .request-meta {
@@ -342,6 +488,22 @@ body {
     padding: 0.6rem 0.7rem;
 }
 
+.admin-user-card {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: #fff;
+    padding: 0.75rem;
+}
+
+.admin-user-card h4 {
+    margin: 0 0 0.3rem;
+    font-size: 0.98rem;
+}
+
+.admin-user-card p {
+    margin: 0.2rem 0;
+}
+
 .modal {
     position: fixed;
     inset: 0;
@@ -367,8 +529,35 @@ body {
     gap: 0.7rem;
 }
 
+.modal-close-x {
+    position: absolute;
+    top: 0.55rem;
+    right: 0.6rem;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--muted);
+    font-size: 1.3rem;
+    line-height: 1;
+    cursor: pointer;
+    transform: rotate(45deg);
+    transition: transform 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.modal-close-x:hover {
+    transform: rotate(135deg) scale(1.03);
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
 .modal-card h3 {
     margin: 0;
+}
+
+#request-modal-details {
+    white-space: pre-line;
 }
 
 .modal-form label {
@@ -378,11 +567,169 @@ body {
 }
 
 .modal-form input,
-.modal-form textarea {
+.modal-form textarea,
+.modal-form select {
     font: inherit;
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 0.45rem 0.55rem;
+}
+
+.compact-list {
+    margin-bottom: 0;
+}
+
+.kid-count-fieldset,
+.audience-fieldset {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.65rem;
+    margin: 0;
+    display: grid;
+    gap: 0.5rem;
+}
+
+.kid-count-fieldset legend,
+.audience-fieldset legend {
+    padding: 0 0.25rem;
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.kid-count-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.kid-option.is-active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: #eef2ff;
+}
+
+.radio-line {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.9rem;
+}
+
+.inline-date-row {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.date-click-target {
+    flex: 1 1 auto;
+    min-width: 7rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #fff;
+    padding: 0.05rem 0.3rem;
+    cursor: pointer;
+}
+
+.date-click-target:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.date-click-target input[type='date'] {
+    width: 100%;
+    border: 0;
+    padding: 0.4rem 0.2rem;
+    background: transparent;
+    cursor: pointer;
+}
+
+.inline-date-row input[type='datetime-local'] {
+    flex: 1;
+}
+
+.inline-date-row input[type='date'] {
+    flex: 1;
+}
+
+.inline-date-row select {
+    min-width: 6.25rem;
+}
+
+.modal-or-note {
+    margin: 0;
+    padding: 0.6rem 0.75rem;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 10%, var(--surface-soft));
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+    color: var(--text);
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+.row-remove {
+    flex: 0 0 auto;
+    width: 1.85rem;
+    height: 1.85rem;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: color-mix(in srgb, var(--danger) 42%, transparent);
+    font-size: 1.15rem;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.row-remove:hover {
+    color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    transform: scale(1.08);
+}
+
+.row-remove:disabled {
+    opacity: 0.4;
+    cursor: default;
+    transform: none;
+    background: transparent;
+}
+
+.fill-toggle {
+    flex: 0 0 auto;
+    border-style: dashed;
+    color: var(--muted);
+    background: var(--surface-soft);
+}
+
+.fill-toggle:hover:not(:disabled) {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.fill-toggle.is-filled {
+    border-style: solid;
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+}
+
+.inline-date-row .fill-person {
+    min-width: 9.5rem;
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.inline-date-row.row-dimmed {
+    opacity: 0.45;
+}
+
+.inline-date-row.row-dimmed .date-click-target {
+    cursor: not-allowed;
 }
 
 @media (max-width: 640px) {

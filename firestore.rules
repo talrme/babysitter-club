@@ -1,0 +1,134 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function myUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isClubVisible(ownerUid) {
+      return isSignedIn()
+        && ownerUid in myUserDoc().data.clubMemberUids;
+    }
+
+    // A linked household partner is treated as the same actor: they can read,
+    // edit, and back out of each other's requests.
+    function isHouseholdPartner(uid) {
+      return isSignedIn()
+        && uid != null
+        && myUserDoc().data.householdPartnerUid == uid;
+    }
+
+    function canReadUser(userUid) {
+      return isSignedIn()
+        && (
+          request.auth.uid == userUid
+          || userUid in myUserDoc().data.clubMemberUids
+          || myUserDoc().data.householdPartnerUid == userUid
+          || isAdmin()
+        );
+    }
+
+    function canClaimRequest() {
+      return isSignedIn()
+        && resource.data.status == 'open'
+        && resource.data.acceptedByUid == null
+        && request.resource.data.acceptedByUid == request.auth.uid
+        && request.resource.data.createdByUid == resource.data.createdByUid
+        && (
+          resource.data.visibility == 'all'
+          || resource.data.visibility == 'club'
+          || (resource.data.visibility == 'subset' && request.auth.uid in resource.data.visibilityUids)
+        );
+    }
+
+    match /admins/{adminUid} {
+      allow read: if isSignedIn() && (request.auth.uid == adminUid || isAdmin());
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin() && request.auth.uid != adminUid;
+    }
+
+    match /users/{userUid} {
+      allow read: if canReadUser(userUid);
+      allow create: if isSignedIn() && request.auth.uid == userUid;
+      allow update: if isSignedIn() && (request.auth.uid == userUid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /requests/{requestId} {
+      allow read: if isSignedIn()
+        && (
+          resource.data.createdByUid == request.auth.uid
+          || resource.data.acceptedByUid == request.auth.uid
+          || isHouseholdPartner(resource.data.createdByUid)
+          || isHouseholdPartner(resource.data.acceptedByUid)
+          || (
+            (resource.data.visibility == 'all' || resource.data.visibility == 'club')
+            && isClubVisible(resource.data.createdByUid)
+          )
+          || (
+            resource.data.visibility == 'subset'
+            && request.auth.uid in resource.data.visibilityUids
+          )
+          || isAdmin()
+        );
+      allow create: if isSignedIn()
+        && request.resource.data.createdByUid == request.auth.uid;
+      allow update, delete: if isSignedIn()
+        && (
+          resource.data.createdByUid == request.auth.uid
+          || resource.data.acceptedByUid == request.auth.uid
+          || isHouseholdPartner(resource.data.createdByUid)
+          || isHouseholdPartner(resource.data.acceptedByUid)
+          || canClaimRequest()
+          || isAdmin()
+        );
+    }
+
+    match /clubInvites/{inviteId} {
+      allow read: if isSignedIn()
+        && (
+          resource.data.fromUid == request.auth.uid
+          || resource.data.toUid == request.auth.uid
+          || isAdmin()
+        );
+      allow create: if isSignedIn()
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.toUid is string
+        && request.resource.data.toUid != request.auth.uid;
+      allow update, delete: if isSignedIn()
+        && (
+          resource.data.fromUid == request.auth.uid
+          || resource.data.toUid == request.auth.uid
+          || isAdmin()
+        );
+    }
+
+    match /householdInvites/{inviteId} {
+      allow read: if isSignedIn()
+        && (
+          resource.data.fromUid == request.auth.uid
+          || resource.data.toUid == request.auth.uid
+          || isAdmin()
+        );
+      allow create: if isSignedIn()
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.toUid is string
+        && request.resource.data.toUid != request.auth.uid;
+      allow update, delete: if isSignedIn()
+        && (
+          resource.data.fromUid == request.auth.uid
+          || resource.data.toUid == request.auth.uid
+          || isAdmin()
+        );
+    }
+  }
+}

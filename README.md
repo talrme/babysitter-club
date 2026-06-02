@@ -17,6 +17,7 @@ Babysitter Club is a static web app (no bundler) for coordinating babysitting wi
 - `styles.css` — app styling
 - `script.js` — Firebase auth wiring and UI state
 - `firebase.js` — shared Firebase app/auth/firestore initialization
+- `firestore.rules` — security policy for user/admin data access
 - `firebase-config.js` — your Firebase web config values
 - `firebase-config.example.js` — config template
 

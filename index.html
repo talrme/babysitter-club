@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Babysitter Club</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=20260601-orclarity2">
 </head>
 <body>
     <header class="site-header">
@@ -42,6 +42,7 @@
             <a href="#club-requests">Others' Requests</a>
             <a href="#my-club">My Babysitter Club</a>
             <a href="#my-household">My Household</a>
+            <a id="nav-admin" href="#admin-view" hidden>Admin</a>
         </nav>
 
         <section id="my-requests" class="panel app-section" hidden>
@@ -91,14 +92,85 @@
             <button type="button" id="btn-remove-partner" class="btn btn-ghost btn-small" hidden>Remove household partner</button>
         </section>
 
+        <section id="admin-view" class="panel app-section" hidden>
+            <h2>Admin: Users and Clubs</h2>
+            <p class="muted small">Only admin UIDs can see this section.</p>
+            <h3 class="subhead">Admin access</h3>
+            <p class="muted small">Grant or remove admin status for other users.</p>
+            <div id="admin-users-list" class="list-stack"></div>
+        </section>
+
         <section id="request-modal" class="modal" hidden>
             <div class="modal-backdrop" data-close="request-modal"></div>
             <div class="modal-card">
                 <h3 id="request-modal-title">Request details</h3>
                 <p id="request-modal-meta" class="muted small"></p>
+                <p id="request-modal-or-note" class="modal-or-note" hidden></p>
                 <p id="request-modal-details" class="muted"></p>
-                <button type="button" class="btn btn-ghost btn-small" data-close="request-modal">Close</button>
+                <div id="request-modal-group" class="list-stack compact-list" hidden></div>
+                <div id="request-modal-actions" class="inline-actions">
+                    <button type="button" id="btn-request-primary" class="btn btn-primary" hidden></button>
+                    <button type="button" id="btn-request-secondary" class="btn btn-ghost btn-small" hidden></button>
+                    <button type="button" id="btn-request-tertiary" class="btn btn-ghost btn-small" hidden></button>
+                    <button type="button" class="btn btn-ghost btn-small" data-close="request-modal">Close</button>
+                </div>
             </div>
+        </section>
+
+        <section id="edit-request-modal" class="modal" hidden>
+            <div class="modal-backdrop" data-close="edit-request-modal"></div>
+            <form id="edit-request-form" class="modal-card modal-form">
+                <button type="button" class="modal-close-x" data-close="edit-request-modal" aria-label="Close edit modal">+</button>
+                <h3>Edit request</h3>
+                <input type="hidden" id="edit-request-id" />
+                <label>
+                    First date option
+                    <div class="inline-date-row" data-edit-row data-edit-primary-row>
+                        <div class="date-click-target">
+                        <input id="edit-request-date" type="date" required />
+                        </div>
+                        <select id="edit-request-time" required></select>
+                        <button type="button" class="btn btn-ghost btn-small fill-toggle" data-fill-toggle>Not filled</button>
+                        <select id="edit-request-filled-by" class="fill-person" hidden></select>
+                        <button type="button" id="btn-edit-remove-primary-date" class="row-remove" aria-label="Remove this date" title="Remove" hidden>&times;</button>
+                    </div>
+                </label>
+                <div id="edit-or-dates-list" class="list-stack compact-list"></div>
+                <button type="button" id="btn-edit-add-or-date" class="btn btn-ghost btn-small">Add OR date</button>
+                <label>
+                    Details
+                    <textarea id="edit-request-details" rows="4" maxlength="400" required></textarea>
+                </label>
+                <label>
+                    Kids
+                    <select id="edit-request-kid-count" required>
+                        <option value="1">1 kid</option>
+                        <option value="2">2 kids</option>
+                        <option value="3">3+ kids</option>
+                    </select>
+                </label>
+                <div class="inline-actions">
+                    <button type="submit" class="btn btn-primary">Save changes</button>
+                    <button type="button" id="btn-edit-delete-request" class="btn btn-ghost btn-small">Delete request</button>
+                    <button type="button" class="btn btn-ghost btn-small" data-close="edit-request-modal">Cancel</button>
+                </div>
+            </form>
+        </section>
+
+        <section id="assign-request-modal" class="modal" hidden>
+            <div class="modal-backdrop" data-close="assign-request-modal"></div>
+            <form id="assign-request-form" class="modal-card modal-form">
+                <h3>Mark accepted by</h3>
+                <input type="hidden" id="assign-request-id" />
+                <label>
+                    Accepted by
+                    <select id="assign-request-user" required></select>
+                </label>
+                <div class="inline-actions">
+                    <button type="submit" class="btn btn-primary">Save accepted person</button>
+                    <button type="button" class="btn btn-ghost btn-small" data-close="assign-request-modal">Cancel</button>
+                </div>
+            </form>
         </section>
 
         <section id="new-request-modal" class="modal" hidden>
@@ -106,17 +178,43 @@
             <form id="new-request-form" class="modal-card modal-form">
                 <h3>Create new request</h3>
                 <label>
-                    Title
-                    <input id="new-request-title" name="title" required maxlength="80" />
+                    First date option
+                    <div class="inline-date-row">
+                        <div class="date-click-target">
+                        <input id="new-request-date" name="date" type="date" required />
+                        </div>
+                        <select id="new-request-time" name="time" required></select>
+                        <button type="button" id="btn-new-remove-primary-date" class="row-remove" aria-label="Remove this date" title="Remove" hidden>&times;</button>
+                    </div>
                 </label>
+                <div id="or-dates-list" class="list-stack compact-list"></div>
+                <button type="button" id="btn-add-or-date" class="btn btn-ghost btn-small">Add OR date</button>
+                <input type="hidden" id="or-date-count" value="1" />
+                <fieldset class="kid-count-fieldset">
+                    <legend>How many kids?</legend>
+                    <div class="kid-count-options">
+                        <button type="button" class="btn btn-ghost btn-small kid-option is-active" data-kid-count="1">1 kid</button>
+                        <button type="button" class="btn btn-ghost btn-small kid-option" data-kid-count="2">2 kids</button>
+                        <button type="button" class="btn btn-ghost btn-small kid-option" data-kid-count="3">3+ kids</button>
+                    </div>
+                    <input type="hidden" id="new-request-kid-count" name="kidCount" value="1" />
+                </fieldset>
                 <label>
-                    Date and time
-                    <input id="new-request-when" name="when" type="datetime-local" required />
-                </label>
-                <label>
-                    Details
+                    Request details
                     <textarea id="new-request-details" name="details" rows="4" maxlength="400" required></textarea>
                 </label>
+                <fieldset class="audience-fieldset">
+                    <legend>Who to request</legend>
+                    <label class="radio-line">
+                        <input type="radio" name="requestAudience" value="all" checked />
+                        Everyone in my club (default)
+                    </label>
+                    <label class="radio-line">
+                        <input type="radio" name="requestAudience" value="subset" />
+                        Just selected members
+                    </label>
+                    <div id="subset-audience-list" class="list-stack compact-list" hidden></div>
+                </fieldset>
                 <div class="inline-actions">
                     <button type="submit" class="btn btn-primary">Create request</button>
                     <button type="button" class="btn btn-ghost btn-small" data-close="new-request-modal">Cancel</button>
@@ -156,6 +254,6 @@
             </div>
         </section>
     </main>
-    <script type="module" src="script.js"></script>
+    <script type="module" src="script.js?v=20260601-orclarity2"></script>
 </body>
 </html>
