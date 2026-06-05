@@ -1,0 +1,41 @@
+---
+description: Babysitter Club app conventions (identity helpers, admin View-as, write guards)
+globs: babysitter-club/**
+alwaysApply: false
+---
+
+# Babysitter Club — core conventions
+
+Static vanilla-JS app (`index.html`, `styles.css`, `script.js` + Firebase). No bundler. Bump the `?v=` cache query on `styles.css`/`script.js` in `index.html` after edits.
+
+## Identity helpers (households + admin "View as")
+
+The app treats a linked two-person household as one actor, AND admins can preview the app as any user (read-only "View as"). Both are powered by an "effective identity" layer in `script.js`:
+
+- `effectiveUid()` — previewed user's UID, or the real signed-in UID.
+- `effectiveProfile()` — previewed user's profile doc, or `state.currentProfile`.
+- `isViewingAs()` — true while an admin previews someone.
+
+**Rule: anything that RENDERS or BUILDS UI from the current user must read `effectiveUid()` / `effectiveProfile()`, never `state.currentUser` / `state.currentProfile` directly.** Otherwise the View-as preview shows the admin's own data.
+
+```js
+// ❌ BAD — breaks View-as preview
+const clubSet = new Set(state.currentProfile?.clubMemberUids || []);
+// ✅ GOOD
+const clubSet = new Set(effectiveProfile()?.clubMemberUids || []);
+```
+
+The modals (Add babysitters, Household, New Request) are NOT duplicated for preview — they reuse the same builders, just swapped to the `effective*` helpers. Cosmetic/layout changes to a modal apply to the preview for free.
+
+## Write guards (read-only preview)
+
+Writes must be blocked while `isViewingAs()`. Two mechanisms:
+
+1. **Direct button/submit handlers:** call `blockedByViewAs()` early (returns true + shows a message). Used by New Request submit, Remove partner, etc.
+2. **Delegated click handler:** a selector list blocks Firestore-write `data-*` actions (`data-send-club`, `data-send-household`, `data-club-accept/decline`, `data-household-accept/decline`, `data-remove-club`, `data-admin-action`).
+
+**When you add a NEW write action, you MUST also block it** — either add its `data-*` to that selector list, or call `blockedByViewAs()` in its handler. Purely local/draft DOM edits (e.g. editing an unsaved form) do not need blocking.
+
+## Security
+
+Never rely on client filtering for access — enforce visibility in `firestore.rules` and publish from the Firebase Console after changes.
