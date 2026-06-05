@@ -62,6 +62,12 @@ const btnRemovePartner = document.getElementById('btn-remove-partner');
 const navAdmin = document.getElementById('nav-admin');
 const adminSection = document.getElementById('admin-view');
 const adminUsersList = document.getElementById('admin-users-list');
+const btnViewAs = document.getElementById('btn-view-as');
+const viewAsModal = document.getElementById('view-as-modal');
+const viewAsList = document.getElementById('view-as-list');
+const viewAsBanner = document.getElementById('view-as-banner');
+const viewAsName = document.getElementById('view-as-name');
+const btnExitViewAs = document.getElementById('btn-exit-view-as');
 
 const btnNewRequest = document.getElementById('btn-new-request');
 const btnAddPeople = document.getElementById('btn-add-people');
@@ -114,7 +120,37 @@ const state = {
     isAdmin: false,
     adminUids: [],
     activeRequestModalId: null,
+    viewAsUid: null,
 };
+
+// "View as" lets an admin preview the app exactly as another member sees it.
+// It only changes the identity the render layer reads from — all writes are
+// blocked while active (see isViewingAs guards).
+function isViewingAs() {
+    return Boolean(state.viewAsUid && state.viewAsUid !== state.currentUser?.uid);
+}
+
+function effectiveUid() {
+    return isViewingAs() ? state.viewAsUid : state.currentUser?.uid;
+}
+
+function effectiveProfile() {
+    if (isViewingAs()) {
+        return state.users.find((user) => user.uid === state.viewAsUid) || null;
+    }
+    return state.currentProfile;
+}
+
+// Returns true (and surfaces a message) when a write should be blocked because
+// we're in a read-only "View as" preview. Buttons stay visible so the preview
+// is faithful, but clicking them does nothing but explain why.
+function blockedByViewAs() {
+    if (!isViewingAs()) {
+        return false;
+    }
+    authStatus.textContent = 'Read-only preview — exit "View as" to make changes.';
+    return true;
+}
 
 function setAuthLoading(text) {
     authStatus.textContent = text;
@@ -270,8 +306,8 @@ function userMap() {
 // lists. Households are capped at two people, so we derive them from the
 // householdPartnerUid pointer rather than a separate collection.
 function myHouseholdUids() {
-    const uids = new Set([state.currentUser.uid]);
-    const partnerUid = state.currentProfile?.householdPartnerUid;
+    const uids = new Set([effectiveUid()]);
+    const partnerUid = effectiveProfile()?.householdPartnerUid;
     if (partnerUid) {
         uids.add(partnerUid);
     }
@@ -350,9 +386,9 @@ function requestVisibleToCurrentUser(request) {
         return true;
     }
     if (request.visibility === 'subset') {
-        return (request.visibilityUids || []).includes(state.currentUser.uid);
+        return (request.visibilityUids || []).includes(effectiveUid());
     }
-    const clubSet = new Set(state.currentProfile?.clubMemberUids || []);
+    const clubSet = new Set(effectiveProfile()?.clubMemberUids || []);
     return clubSet.has(request.createdByUid);
 }
 
@@ -644,7 +680,7 @@ function makeRequestRow(request, usersByUid, context = 'others') {
     }
 
     row.addEventListener('click', () => {
-        if (isMine(request.createdByUid)) {
+        if (!isViewingAs() && isMine(request.createdByUid)) {
             openRequestForm(request);
             return;
         }
@@ -731,6 +767,17 @@ function openRequestModal(request, metaText) {
     requestModalMeta.textContent = metaText;
     requestModalDetails.textContent = request.details || 'No details yet.';
     renderRequestGroupInModal(request);
+
+    // Read-only preview: show details with no action buttons.
+    if (isViewingAs()) {
+        if (requestModalOrNote) {
+            requestModalOrNote.hidden = true;
+            requestModalOrNote.textContent = '';
+        }
+        setRequestModalButtons({});
+        openModal(requestModal);
+        return;
+    }
 
     const isOwner = isMine(request.createdByUid);
     const isOpen = request.status === 'open';
@@ -862,7 +909,7 @@ function renderMyRequests() {
 
     const myRequestsHeading = document.getElementById('my-requests-heading');
     if (myRequestsHeading) {
-        const inHousehold = Boolean(state.currentProfile?.householdPartnerUid);
+        const inHousehold = Boolean(effectiveProfile()?.householdPartnerUid);
         myRequestsHeading.textContent = inHousehold ? 'Our Babysitting Requests' : 'My Babysitting Requests';
     }
 
@@ -913,7 +960,7 @@ function renderUpcomingBabysits() {
 
 function renderClubMembers() {
     const usersByUid = userMap();
-    const memberIds = new Set(state.currentProfile?.clubMemberUids || []);
+    const memberIds = new Set(effectiveProfile()?.clubMemberUids || []);
     const handled = new Set();
     clubMembersList.innerHTML = '';
 
@@ -968,6 +1015,19 @@ function renderClubMembers() {
 }
 
 function renderIncomingInvites() {
+    // Invites are loaded for the real signed-in user only, so hide them while
+    // previewing someone else's view to avoid showing the admin's own invites.
+    if (isViewingAs()) {
+        [outgoingClubInvites, incomingClubInvites, incomingHouseholdInvites].forEach((el) => {
+            if (el) {
+                el.innerHTML = '';
+                el.hidden = true;
+            }
+        });
+        if (outgoingInvitesHeading) outgoingInvitesHeading.hidden = true;
+        if (incomingInvitesHeading) incomingInvitesHeading.hidden = true;
+        return;
+    }
     const usersByUid = userMap();
     const uniqueIncomingBySender = new Map();
     state.clubInvites.forEach((invite) => {
@@ -1033,7 +1093,7 @@ function renderIncomingInvites() {
 
 function renderHousehold() {
     const usersByUid = userMap();
-    const partnerUid = state.currentProfile?.householdPartnerUid;
+    const partnerUid = effectiveProfile()?.householdPartnerUid;
     if (!partnerUid) {
         householdStatus.textContent = 'No household partner linked yet.';
         btnHouseholdAction.textContent = 'Add my parenting partner / lover / spouse';
@@ -1061,7 +1121,9 @@ function renderAdminSection() {
     if (!adminSection || !adminUsersList || !navAdmin) {
         return;
     }
-    if (!state.isAdmin) {
+    // While previewing another member, mirror their (non-admin) view by hiding
+    // admin tools. The banner's Exit button is always available to return.
+    if (!state.isAdmin || isViewingAs()) {
         adminSection.hidden = true;
         navAdmin.hidden = true;
         return;
@@ -1109,8 +1171,75 @@ function renderAdminSection() {
     });
 }
 
+function applyViewAsUiState() {
+    const viewing = isViewingAs();
+    document.body.classList.toggle('is-viewing-as', viewing);
+    if (viewAsBanner) {
+        viewAsBanner.hidden = !viewing;
+    }
+    if (viewAsName && viewing) {
+        viewAsName.textContent = householdDisplayName(state.viewAsUid);
+    }
+}
+
+function setViewAs(uid) {
+    if (!state.isAdmin || !uid || uid === state.currentUser?.uid) {
+        return;
+    }
+    state.viewAsUid = uid;
+    closeModal('view-as-modal');
+    applyViewAsUiState();
+    renderAllSections();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function exitViewAs() {
+    state.viewAsUid = null;
+    if (authStatus.textContent.startsWith('Read-only preview')) {
+        authStatus.textContent = '';
+    }
+    applyViewAsUiState();
+    renderAllSections();
+}
+
+function buildViewAsModal() {
+    if (!viewAsList) {
+        return;
+    }
+    const candidates = [...state.users]
+        .filter((user) => user.uid !== state.currentUser?.uid)
+        .sort((a, b) => (a.displayName || a.email || '').localeCompare(b.displayName || b.email || ''));
+
+    viewAsList.className = 'people-circle-grid';
+    viewAsList.innerHTML = '';
+    candidates.forEach((user) => {
+        const photo = user.photoURL || '';
+        const initials = (user.displayName || user.email || '?').trim().charAt(0).toUpperCase();
+        const avatarStyle = photo ? ` style="background-image:url('${photo}')"` : '';
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'person-circle';
+        item.dataset.viewAsUid = user.uid;
+        item.title = user.email
+            ? `${user.displayName || 'Unnamed'} · ${user.email}`
+            : (user.displayName || 'Unnamed');
+        item.innerHTML = `
+            <span class="person-circle-avatar-wrap">
+                <span class="person-circle-avatar"${avatarStyle}>${photo ? '' : initials}</span>
+            </span>
+            <span class="person-circle-name">${firstName(user.displayName) || user.email}</span>
+        `;
+        viewAsList.appendChild(item);
+    });
+
+    if (candidates.length === 0) {
+        viewAsList.className = 'list-stack';
+        viewAsList.innerHTML = '<p class="empty-state">No other users to view as yet.</p>';
+    }
+}
+
 function buildInviteLink() {
-    const uid = state.currentUser?.uid || '';
+    const uid = effectiveUid() || '';
     return `${window.location.origin}${window.location.pathname}?inviteFrom=${uid}`;
 }
 
@@ -1166,12 +1295,16 @@ async function processInviteLink() {
 }
 
 function buildAddPeopleModal() {
-    const myClub = new Set(state.currentProfile?.clubMemberUids || []);
+    const myClub = new Set(effectiveProfile()?.clubMemberUids || []);
     const myClubArray = [...myClub];
-    const pendingTo = new Set(state.outgoingClubInvites.map((invite) => invite.toUid));
+    // Outgoing invites are only loaded for the real user, so we can't show the
+    // previewed member's pending state — leave it empty in that case.
+    const pendingTo = isViewingAs()
+        ? new Set()
+        : new Set(state.outgoingClubInvites.map((invite) => invite.toUid));
 
     const candidates = state.users
-        .filter((user) => user.uid !== state.currentUser.uid)
+        .filter((user) => user.uid !== effectiveUid())
         .filter((user) => !myClub.has(user.uid))
         .map((user) => {
             const theirClub = new Set(user.clubMemberUids || []);
@@ -1215,9 +1348,10 @@ function buildAddPeopleModal() {
 
 function buildHouseholdModal() {
     householdCandidateList.innerHTML = '';
+    const selfUid = effectiveUid();
     const candidates = state.users
-        .filter((user) => user.uid !== state.currentUser.uid)
-        .filter((user) => !user.householdPartnerUid || user.householdPartnerUid === state.currentUser.uid);
+        .filter((user) => user.uid !== selfUid)
+        .filter((user) => !user.householdPartnerUid || user.householdPartnerUid === selfUid);
 
     candidates.forEach((user) => {
         const row = document.createElement('div');
@@ -1298,7 +1432,7 @@ function getGroupedRequests(request) {
 
 function getAssignableHouseholdsForRequest(request) {
     const usersByUid = userMap();
-    const clubSet = new Set(state.currentProfile?.clubMemberUids || []);
+    const clubSet = new Set(effectiveProfile()?.clubMemberUids || []);
     const allowedUids = request.visibility === 'subset'
         ? new Set(request.visibilityUids || [])
         : clubSet;
@@ -1518,7 +1652,7 @@ function buildAudienceList(listEl, inputName, selectedUids = []) {
         return;
     }
     listEl.innerHTML = '';
-    const clubSet = new Set(state.currentProfile?.clubMemberUids || []);
+    const clubSet = new Set(effectiveProfile()?.clubMemberUids || []);
     const usersByUid = userMap();
     const candidateUids = [...clubSet].filter((uid) => !isMine(uid));
     const groups = groupUidsByHousehold(candidateUids, usersByUid);
@@ -1609,6 +1743,8 @@ document.addEventListener('DOMContentLoaded', () => {
             state.currentUser = null;
             state.currentProfile = null;
             state.isAdmin = false;
+            state.viewAsUid = null;
+            applyViewAsUiState();
             showSignedOut();
         }
     });
@@ -1653,6 +1789,15 @@ document.addEventListener('DOMContentLoaded', () => {
         openModal(addPeopleModal);
     });
 
+    bindClick(btnViewAs, () => {
+        buildViewAsModal();
+        openModal(viewAsModal);
+    });
+
+    bindClick(btnExitViewAs, () => {
+        exitViewAs();
+    });
+
     bindClick(btnCopyInviteLink, async () => {
         const link = buildInviteLink();
         if (inviteLinkInput) {
@@ -1668,7 +1813,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     bindClick(btnHouseholdAction, () => {
-        if (state.currentProfile?.householdPartnerUid) {
+        if (effectiveProfile()?.householdPartnerUid) {
             return;
         }
         buildHouseholdModal();
@@ -1713,6 +1858,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         requestForm.addEventListener('submit', async (event) => {
             event.preventDefault();
+            if (blockedByViewAs()) {
+                closeModal('request-form-modal');
+                return;
+            }
             const normalizedOptions = gatherFormOptions();
             if (!normalizedOptions.length) {
                 authStatus.textContent = 'Please choose at least one date and time.';
@@ -1846,6 +1995,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     bindClick(btnRemovePartner, async () => {
+        if (blockedByViewAs()) {
+            return;
+        }
         const partnerUid = state.currentProfile?.householdPartnerUid;
         if (!partnerUid) {
             return;
@@ -1910,6 +2062,17 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // Read-only preview: block actions that write to Firestore. Purely local
+        // controls (opening modals, editing the draft form) stay interactive so
+        // the preview shows what the member sees.
+        if (isViewingAs()) {
+            const writeTarget = target.closest('[data-remove-club],[data-admin-action],[data-send-club],[data-send-household],[data-club-accept],[data-club-decline],[data-household-accept],[data-household-decline]');
+            if (writeTarget) {
+                authStatus.textContent = 'Read-only preview — exit "View as" to make changes.';
+                return;
+            }
+        }
+
         const removeRowBtn = target.closest('[data-remove-row]');
         if (removeRowBtn && requestForm?.contains(removeRowBtn)) {
             const row = removeRowBtn.closest('.inline-date-row');
@@ -1918,6 +2081,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 refreshRemoveButtons();
                 applyFillState(getFilledRow());
             }
+            return;
+        }
+
+        const viewAsTarget = target.closest('[data-view-as-uid]');
+        if (viewAsTarget) {
+            setViewAs(viewAsTarget.dataset.viewAsUid);
             return;
         }
 

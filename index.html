@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Babysitter Club</title>
-    <link rel="stylesheet" href="styles.css?v=20260604-orfill1">
+    <link rel="stylesheet" href="styles.css?v=20260605-viewas4">
 </head>
 <body>
     <header class="site-header">
@@ -16,6 +16,10 @@
         </div>
     </header>
     <main id="app">
+        <div id="view-as-banner" class="view-as-banner" hidden>
+            <span class="view-as-banner-text">👁 Viewing as <strong id="view-as-name"></strong> — read-only preview</span>
+            <button type="button" id="btn-exit-view-as" class="btn btn-small view-as-exit">Exit view</button>
+        </div>
         <p id="setup-hint" class="setup-hint" hidden>
             Add your Firebase web config to <code>firebase-config.js</code> (see <code>firebase-config.example.js</code>).
         </p>
@@ -94,6 +98,9 @@
             <p>
                 <a href="https://console.firebase.google.com/project/babysitter-club/firestore/data" target="_blank" rel="noopener" class="btn btn-ghost btn-small">Open Firestore data ↗</a>
             </p>
+            <h3 class="subhead">View as another user</h3>
+            <p class="muted small">Preview the app exactly as another member sees it (read-only).</p>
+            <button type="button" id="btn-view-as" class="btn btn-ghost btn-small">Choose user to view as</button>
             <h3 class="subhead">Admin access</h3>
             <p class="muted small">Grant or remove admin status for other users.</p>
             <div id="admin-users-list" class="list-stack"></div>
@@ -186,6 +193,19 @@
             </div>
         </section>
 
+        <section id="view-as-modal" class="modal" hidden>
+            <div class="modal-backdrop" data-close="view-as-modal"></div>
+            <div class="modal-card">
+                <button type="button" class="modal-close-x" data-close="view-as-modal" aria-label="Close">+</button>
+                <h3>View as another user</h3>
+                <p class="muted small">Pick someone to preview their boards. Read-only — you can't make changes while viewing.</p>
+                <div id="view-as-list" class="people-circle-grid"></div>
+                <div class="inline-actions">
+                    <button type="button" class="btn btn-ghost btn-small" data-close="view-as-modal">Cancel</button>
+                </div>
+            </div>
+        </section>
+
         <section id="household-modal" class="modal" hidden>
             <div class="modal-backdrop" data-close="household-modal"></div>
             <div class="modal-card">
@@ -208,6 +228,6 @@
             </div>
         </section>
     </main>
-    <script type="module" src="script.js?v=20260604-orfill1"></script>
+    <script type="module" src="script.js?v=20260605-viewas5"></script>
 </body>
 </html>

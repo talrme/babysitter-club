@@ -8,7 +8,7 @@ Context for humans and coding assistants continuing this project.
 
 A **static site** (no bundler): `index.html`, `styles.css`, `script.js`, plus Firebase config. Goal is a babysitting coordination app: **Google sign-in**, optional **two-person households**, **household-to-household connections** (bidirectional accepts), and section-based flows for **my requests**, **others' requests**, **club management**, and **household linking**.
 
-**Implemented today:** Firebase Auth with **Google** (`signInWithPopup`), Firestore user profile sync (`users/{uid}`), section-based signed-in navigation, request modals (kid count, OR-date groups, audience targeting), club invite send/accept flow (with pending dedupe), household invite/link flow, UID-based admin view (`admins/{uid}`), and admin add/remove controls for other users.
+**Implemented today:** Firebase Auth with **Google** (`signInWithPopup`), Firestore user profile sync (`users/{uid}`), section-based signed-in navigation, a single unified request modal (OR-date groups, audience targeting, manual fill incl. "Other"), club invite send/accept flow (with pending dedupe), household invite/link flow, **household-aware rendering** (linked partners act as one actor everywhere), UID-based admin view (`admins/{uid}`), admin add/remove controls, and an admin **read-only "View as" preview** of any user.
 
 **Not implemented yet:** production-grade Firestore security rules, full booking lifecycle, notifications, and polished invitation/onboarding flows.
 
@@ -106,10 +106,40 @@ If you tighten rules further, ensure client queries stay scoped; broad `users` q
 - Admin users can grant/revoke admin for other users from the Admin section.
 - Firestore rules in `firestore.rules` enforce admin access server-side.
 
+## Identity model: households + admin "View as" (read this before touching render code)
+
+Two features share one "effective identity" layer in `script.js`. **A linked two-person household is treated as a single actor**, and **an admin can preview the app as any user** (read-only "View as", launched from the Admin section; shows a sticky banner with an Exit button).
+
+Both are powered by three helpers — use them in anything that renders/builds UI:
+
+- `effectiveUid()` → previewed user's UID, else the real signed-in UID.
+- `effectiveProfile()` → previewed user's profile doc, else `state.currentProfile`.
+- `isViewingAs()` → true while previewing.
+
+**Pitfall 1 — reading identity directly.** In display/builder code, use `effectiveUid()` / `effectiveProfile()`, NOT `state.currentUser` / `state.currentProfile`. Reading them directly makes the View-as preview show the admin's own data instead of the previewed member's.
+
+```js
+// ❌ BAD — breaks the preview
+const clubSet = new Set(state.currentProfile?.clubMemberUids || []);
+// ✅ GOOD
+const clubSet = new Set(effectiveProfile()?.clubMemberUids || []);
+```
+
+The modals (Add babysitters, Household, New Request) are **not** duplicated for preview — they reuse the same builders, swapped to the `effective*` helpers. So cosmetic/layout changes to a modal flow into the preview automatically.
+
+**Pitfall 2 — new write actions must be blocked in preview.** Writes are blocked two ways:
+1. Direct handlers call `blockedByViewAs()` early (e.g. New Request submit, Remove partner).
+2. The delegated click handler blocks a selector list of Firestore-write `data-*` attributes (`data-send-club`, `data-send-household`, `data-club-accept/decline`, `data-household-accept/decline`, `data-remove-club`, `data-admin-action`).
+
+When you add a new write action, add its `data-*` to that selector list **or** call `blockedByViewAs()` in its handler. Purely local/draft DOM edits (editing an unsaved form) don't need blocking.
+
+> A condensed version of this lives in `.cursor/rules/babysitter-club-conventions.mdc`, which auto-loads into future agent sessions when editing `babysitter-club/**`.
+
 ## Conventions for future changes
 
 - Keep **vanilla JS** and **module** imports unless the user asks for a framework.
-- **Firestore security rules** must enforce visibility (never rely on client-only filtering).
+- After editing `styles.css`/`script.js`, **bump the `?v=` cache-busting query** on their `<link>`/`<script>` tags in `index.html`.
+- **Firestore security rules** must enforce visibility (never rely on client-only filtering); publish from the Firebase Console after changes.
 - Prefer **`firebase/auth`** patterns already in `script.js`; extend with thin modules (`firebase/firestore.js`) via same CDN style when adding data layer.
 - **Mobile-first** responsive CSS; theme hooks already exist on `:root` for a future settings modal.
 
