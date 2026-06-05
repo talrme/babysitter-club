@@ -55,6 +55,8 @@ const clubInvitesNote = document.getElementById('club-invites-note');
 const outgoingClubInvites = document.getElementById('outgoing-club-invites');
 const incomingClubInvites = document.getElementById('incoming-club-invites');
 const incomingHouseholdInvites = document.getElementById('incoming-household-invites');
+const outgoingInvitesHeading = document.getElementById('outgoing-invites-heading');
+const incomingInvitesHeading = document.getElementById('incoming-invites-heading');
 const householdStatus = document.getElementById('household-status');
 const btnHouseholdAction = document.getElementById('btn-household-action');
 const btnRemovePartner = document.getElementById('btn-remove-partner');
@@ -907,8 +909,10 @@ function renderIncomingInvites() {
         `;
         outgoingClubInvites.appendChild(row);
     });
-    if (state.outgoingClubInvites.length === 0) {
-        outgoingClubInvites.innerHTML = '<p class="empty-state">No pending invites sent.</p>';
+    const hasOutgoing = state.outgoingClubInvites.length > 0;
+    outgoingClubInvites.hidden = !hasOutgoing;
+    if (outgoingInvitesHeading) {
+        outgoingInvitesHeading.hidden = !hasOutgoing;
     }
 
     incomingClubInvites.innerHTML = '';
@@ -925,8 +929,10 @@ function renderIncomingInvites() {
         `;
         incomingClubInvites.appendChild(row);
     });
-    if (uniqueIncoming.length === 0) {
-        incomingClubInvites.innerHTML = '<p class="empty-state">No pending club invites.</p>';
+    const hasIncoming = uniqueIncoming.length > 0;
+    incomingClubInvites.hidden = !hasIncoming;
+    if (incomingInvitesHeading) {
+        incomingInvitesHeading.hidden = !hasIncoming;
     }
 
     incomingHouseholdInvites.innerHTML = '';
@@ -943,9 +949,7 @@ function renderIncomingInvites() {
         `;
         incomingHouseholdInvites.appendChild(row);
     });
-    if (state.householdInvites.length === 0) {
-        incomingHouseholdInvites.innerHTML = '<p class="empty-state">No pending household invites.</p>';
-    }
+    incomingHouseholdInvites.hidden = state.householdInvites.length === 0;
 }
 
 function renderHousehold() {

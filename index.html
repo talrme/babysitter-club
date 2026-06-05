@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Babysitter Club</title>
-    <link rel="stylesheet" href="styles.css?v=20260601-orclarity2">
+    <link rel="stylesheet" href="styles.css?v=20260604-invites1">
 </head>
 <body>
     <header class="site-header">
@@ -76,9 +76,9 @@
             </div>
             <div id="club-members-list" class="member-grid"></div>
             <p id="club-invites-note" class="muted small"></p>
-            <h3 class="subhead">Pending sent invites</h3>
+            <h3 id="outgoing-invites-heading" class="subhead" hidden>Pending sent invites</h3>
             <div id="outgoing-club-invites" class="list-stack"></div>
-            <h3 class="subhead">Invites waiting for me</h3>
+            <h3 id="incoming-invites-heading" class="subhead" hidden>Invites waiting for me</h3>
             <div id="incoming-club-invites" class="list-stack"></div>
         </section>
 
@@ -254,6 +254,6 @@
             </div>
         </section>
     </main>
-    <script type="module" src="script.js?v=20260601-orclarity2"></script>
+    <script type="module" src="script.js?v=20260604-invites1"></script>
 </body>
 </html>
