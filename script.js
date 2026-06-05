@@ -47,7 +47,6 @@ const signedInSections = [
 const myRequestsList = document.getElementById('my-requests-list');
 const othersRequestsList = document.getElementById('others-requests-list');
 const btnToggleMyOld = document.getElementById('btn-toggle-my-old');
-const btnToggleOthersOld = document.getElementById('btn-toggle-others-old');
 const upcomingList = document.getElementById('upcoming-list');
 const upcomingEmpty = document.getElementById('upcoming-empty');
 const clubMembersList = document.getElementById('club-members-list');
@@ -66,7 +65,8 @@ const adminUsersList = document.getElementById('admin-users-list');
 
 const btnNewRequest = document.getElementById('btn-new-request');
 const btnAddPeople = document.getElementById('btn-add-people');
-const btnInviteLink = document.getElementById('btn-invite-link');
+const inviteLinkInput = document.getElementById('invite-link-input');
+const btnCopyInviteLink = document.getElementById('btn-copy-invite-link');
 const requestModal = document.getElementById('request-modal');
 const requestModalTitle = document.getElementById('request-modal-title');
 const requestModalMeta = document.getElementById('request-modal-meta');
@@ -76,35 +76,26 @@ const requestModalGroup = document.getElementById('request-modal-group');
 const btnRequestPrimary = document.getElementById('btn-request-primary');
 const btnRequestSecondary = document.getElementById('btn-request-secondary');
 const btnRequestTertiary = document.getElementById('btn-request-tertiary');
-const newRequestModal = document.getElementById('new-request-modal');
-const newRequestForm = document.getElementById('new-request-form');
-const newRequestDate = document.getElementById('new-request-date');
-const newRequestTime = document.getElementById('new-request-time');
-const btnNewRemovePrimaryDate = document.getElementById('btn-new-remove-primary-date');
+const requestFormModal = document.getElementById('request-form-modal');
+const requestForm = document.getElementById('request-form');
+const requestFormTitle = document.getElementById('request-form-title');
+const requestFormId = document.getElementById('request-form-id');
+const dateRowsList = document.getElementById('date-rows');
 const btnAddOrDate = document.getElementById('btn-add-or-date');
-const orDatesList = document.getElementById('or-dates-list');
-const orDateCount = document.getElementById('or-date-count');
-const kidOptions = Array.from(document.querySelectorAll('.kid-option'));
-const newRequestKidCount = document.getElementById('new-request-kid-count');
-const subsetAudienceList = document.getElementById('subset-audience-list');
+const requestFormDetails = document.getElementById('request-form-details');
+const requestFormAudience = document.getElementById('request-form-audience');
+const requestFormAudienceList = document.getElementById('request-form-audience-list');
+const btnRequestSubmit = document.getElementById('btn-request-submit');
+const btnRequestDelete = document.getElementById('btn-request-delete');
 const addPeopleModal = document.getElementById('add-people-modal');
 const addPeopleList = document.getElementById('add-people-list');
 const householdModal = document.getElementById('household-modal');
 const householdCandidateList = document.getElementById('household-candidate-list');
 const removeClubModal = document.getElementById('remove-club-modal');
 const btnConfirmRemoveClub = document.getElementById('btn-confirm-remove-club');
-const editRequestModal = document.getElementById('edit-request-modal');
-const editRequestForm = document.getElementById('edit-request-form');
-const editRequestId = document.getElementById('edit-request-id');
-const editRequestDate = document.getElementById('edit-request-date');
-const editRequestTime = document.getElementById('edit-request-time');
-const btnEditRemovePrimaryDate = document.getElementById('btn-edit-remove-primary-date');
-const editRequestFilledBy = document.getElementById('edit-request-filled-by');
-const editRequestDetails = document.getElementById('edit-request-details');
-const editRequestKidCount = document.getElementById('edit-request-kid-count');
-const editOrDatesList = document.getElementById('edit-or-dates-list');
-const btnEditAddOrDate = document.getElementById('btn-edit-add-or-date');
-const btnEditDeleteRequest = document.getElementById('btn-edit-delete-request');
+
+// Households assignable to the request currently open in the form (for manual fill).
+let currentFormAssignable = [];
 const assignRequestModal = document.getElementById('assign-request-modal');
 const assignRequestForm = document.getElementById('assign-request-form');
 const assignRequestId = document.getElementById('assign-request-id');
@@ -119,7 +110,6 @@ const state = {
     clubInvites: [],
     householdInvites: [],
     showOldMine: false,
-    showOldOthers: false,
     pendingClubRemovalUids: [],
     isAdmin: false,
     adminUids: [],
@@ -502,43 +492,96 @@ async function loadAppData() {
         visibleUids.add(invite.fromUid);
     });
 
-    const userDocs = await Promise.all(
-        [...visibleUids].map(async (uid) => {
-            try {
-                const snap = await getDoc(doc(db, 'users', uid));
-                return snap.exists() ? { id: snap.id, ...snap.data() } : null;
-            } catch (err) {
-                console.warn('Skipping user doc fetch due to permission or missing access:', uid, err?.code || err);
-                return null;
-            }
-        }),
-    );
-    state.users = userDocs.filter(Boolean);
+    // Everyone signed in can see everyone in the system so they can add each
+    // other to their clubs. Fall back to a scoped fetch if the broad read fails.
+    try {
+        const usersSnap = await getDocs(collection(db, 'users'));
+        state.users = usersSnap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+    } catch (err) {
+        console.warn('Full user list query failed, falling back to scoped fetch:', err?.code || err);
+        const userDocs = await Promise.all(
+            [...visibleUids].map(async (uid) => {
+                try {
+                    const snap = await getDoc(doc(db, 'users', uid));
+                    return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+                } catch (innerErr) {
+                    console.warn('Skipping user doc fetch due to permission or missing access:', uid, innerErr?.code || innerErr);
+                    return null;
+                }
+            }),
+        );
+        state.users = userDocs.filter(Boolean);
+    }
     state.adminUids = state.isAdmin ? state.adminUids : [];
     if (!state.currentProfile) {
         state.currentProfile = state.users.find((user) => user.uid === state.currentUser.uid) || null;
     }
 }
 
-function makeRequestRow(request, usersByUid) {
+function truncateText(text, max = 90) {
+    const value = (text || '').trim();
+    if (!value) {
+        return '';
+    }
+    return value.length > max ? `${value.slice(0, max - 1).trimEnd()}…` : value;
+}
+
+// "Babysitter: Name" for a single sitter, "Babysitters: A and B" for a household.
+function babysitterLine(request, usersByUid = userMap()) {
+    if (request.acceptedOther) {
+        return `Babysitter: ${request.acceptedByName || 'Someone else'}`;
+    }
+    if (!request.acceptedByUid) {
+        return '';
+    }
+    const user = usersByUid.get(request.acceptedByUid);
+    if (!user) {
+        return 'Babysitter: Unknown';
+    }
+    const partner = user.householdPartnerUid ? usersByUid.get(user.householdPartnerUid) : null;
+    if (partner) {
+        return `Babysitters: ${firstName(user.displayName)} and ${firstName(partner.displayName)}`;
+    }
+    return `Babysitter: ${user.displayName || user.email || 'Unknown'}`;
+}
+
+function makeLine(text, className) {
+    const el = document.createElement('p');
+    el.className = className;
+    el.textContent = text;
+    return el;
+}
+
+// context: 'mine' (requester's page) leads with the date, then details, then the
+// booked sitter. 'others' leads with the requester's name, then date + details.
+function makeRequestRow(request, usersByUid, context = 'others') {
+    const isMineRow = context === 'mine';
+    const status = request.status || 'open';
     const row = document.createElement('button');
     row.type = 'button';
     row.className = 'request-row';
-    row.classList.add(`status-${request.status || 'open'}`);
-    if (request.groupId && Number(request.groupSize || 0) > 1) {
+    // Upcoming commitments stay neutral (no green "accepted" styling).
+    if (context !== 'upcoming') {
+        row.classList.add(`status-${status}`);
+    }
+    row.classList.add(isMineRow ? 'request-row-mine' : 'request-row-others');
+    // No OR badge for upcoming commitments, or for the requester's own filled
+    // requests (the date is already settled).
+    const isFilled = status === 'accepted' || Boolean(request.acceptedByUid) || Boolean(request.acceptedOther);
+    const isGroup = Boolean(request.groupId)
+        && Number(request.groupSize || 0) > 1
+        && context !== 'upcoming'
+        && !(isMineRow && isFilled);
+    if (isGroup) {
         row.dataset.groupId = request.groupId;
     }
 
-    const titleLine = document.createElement('div');
-    titleLine.className = 'request-title-line';
-    const title = document.createElement('p');
-    title.className = 'request-title';
-    title.textContent = householdDisplayName(request.createdByUid, usersByUid);
-
+    // Pills (OR badge, and a status badge only for old/closed mine items) live in
+    // a top-right group that shares the header line with the primary text.
     const pillGroup = document.createElement('div');
     pillGroup.className = 'request-pill-group';
 
-    if (request.groupId && Number(request.groupSize || 0) > 1) {
+    if (isGroup) {
         const orPill = document.createElement('span');
         orPill.className = 'or-pill';
         const colors = getOrGroupColor(request.groupId);
@@ -561,28 +604,51 @@ function makeRequestRow(request, usersByUid) {
         row.addEventListener('mouseleave', () => clearOrGroupHover());
     }
 
-    const statusPill = document.createElement('span');
-    statusPill.className = `status-pill status-${request.status || 'open'}`;
-    statusPill.textContent = statusLabel(request.status);
-    pillGroup.appendChild(statusPill);
+    // Only the requester's old/closed items still show a status badge — everything
+    // else on screen is open (or, for upcoming sits, implicitly booked).
+    if (isMineRow && status !== 'open' && status !== 'accepted') {
+        const statusPill = document.createElement('span');
+        statusPill.className = `status-pill status-${status}`;
+        statusPill.textContent = statusLabel(status);
+        pillGroup.appendChild(statusPill);
+    }
 
-    const meta = document.createElement('p');
-    meta.className = 'request-meta';
-    const kidCount = request.kidCount || 1;
-    const kidsText = `${kidCount} kid${kidCount > 1 ? 's' : ''}`;
-    const audienceText = request.visibility === 'subset' ? 'Selected people' : 'All club';
-    meta.textContent = `${formatDateTimeLong(request.whenISO)} · ${kidsText} · ${audienceText}`;
+    const dateText = formatDateTimeLong(request.whenISO);
+    const header = document.createElement('div');
+    header.className = 'request-title-line';
+    const primary = makeLine(
+        isMineRow ? dateText : householdDisplayName(request.createdByUid, usersByUid),
+        isMineRow ? 'request-line-muted' : 'request-name',
+    );
+    header.appendChild(primary);
+    if (pillGroup.children.length) {
+        header.appendChild(pillGroup);
+    }
+    row.appendChild(header);
 
-    titleLine.appendChild(title);
-    titleLine.appendChild(pillGroup);
-    row.appendChild(titleLine);
-    row.appendChild(meta);
+    if (isMineRow) {
+        const detailText = truncateText(request.details, 120);
+        if (detailText) {
+            row.appendChild(makeLine(detailText, 'request-line-muted'));
+        }
+        const sitter = babysitterLine(request, usersByUid);
+        if (sitter) {
+            row.appendChild(makeLine(sitter, 'request-sitter'));
+        }
+    } else {
+        row.appendChild(makeLine(dateText, 'request-line-muted'));
+        const descText = truncateText(request.details, 110);
+        if (descText) {
+            row.appendChild(makeLine(descText, 'request-line-muted'));
+        }
+    }
+
     row.addEventListener('click', () => {
         if (isMine(request.createdByUid)) {
-            openEditRequestModal(request);
+            openRequestForm(request);
             return;
         }
-        openRequestModal(request, meta.textContent);
+        openRequestModal(request, dateText);
     });
 
     return row;
@@ -661,9 +727,9 @@ function renderRequestGroupInModal(request) {
 
 function openRequestModal(request, metaText) {
     state.activeRequestModalId = request.id;
-    requestModalTitle.textContent = request.title || `${request.kidCount || 1} kid request`;
+    requestModalTitle.textContent = householdDisplayName(request.createdByUid);
     requestModalMeta.textContent = metaText;
-    requestModalDetails.textContent = `${request.details || 'No details yet.'}\n\nKids: ${request.kidCount || 1}`;
+    requestModalDetails.textContent = request.details || 'No details yet.';
     renderRequestGroupInModal(request);
 
     const isOwner = isMine(request.createdByUid);
@@ -689,7 +755,7 @@ function openRequestModal(request, metaText) {
             tertiaryText: 'Delete',
             onPrimary: () => {
                 closeModal('request-modal');
-                openEditRequestModal(request);
+                openRequestForm(request);
             },
             onSecondary: () => {
                 closeModal('request-modal');
@@ -775,7 +841,16 @@ function openRequestModal(request, metaText) {
 }
 
 function renderMyRequests() {
-    const mine = state.requests.filter((request) => isMine(request.createdByUid));
+    // Once one date in an OR group is filled, the others become 'superseded' —
+    // hide those siblings entirely so only the chosen date remains.
+    const filledGroupIds = new Set(
+        state.requests
+            .filter((request) => request.status === 'accepted' && request.groupId)
+            .map((request) => request.groupId),
+    );
+    const mine = state.requests
+        .filter((request) => isMine(request.createdByUid))
+        .filter((request) => !(request.status === 'superseded' && request.groupId && filledGroupIds.has(request.groupId)));
     const openItems = mine
         .filter((request) => request.status === 'open' || request.status === 'accepted')
         .sort(byRequestDateAsc);
@@ -785,8 +860,14 @@ function renderMyRequests() {
     const visible = state.showOldMine ? [...openItems, ...oldItems] : openItems;
     const usersByUid = userMap();
 
+    const myRequestsHeading = document.getElementById('my-requests-heading');
+    if (myRequestsHeading) {
+        const inHousehold = Boolean(state.currentProfile?.householdPartnerUid);
+        myRequestsHeading.textContent = inHousehold ? 'Our Babysitting Requests' : 'My Babysitting Requests';
+    }
+
     myRequestsList.innerHTML = '';
-    visible.forEach((request) => myRequestsList.appendChild(makeRequestRow(request, usersByUid)));
+    visible.forEach((request) => myRequestsList.appendChild(makeRequestRow(request, usersByUid, 'mine')));
 
     if (visible.length === 0) {
         myRequestsList.innerHTML = '<p class="empty-state">No requests yet. Hit "New Request" to add one.</p>';
@@ -795,20 +876,18 @@ function renderMyRequests() {
 }
 
 function renderOthersRequests() {
-    const others = state.requests
+    const visible = state.requests
         .filter((request) => !isMine(request.createdByUid))
-        .filter((request) => requestVisibleToCurrentUser(request));
-    const openItems = others.filter((request) => request.status === 'open').sort(byRequestDateAsc);
-    const oldItems = others.filter((request) => request.status !== 'open').sort(byRequestDateAsc);
-    const visible = state.showOldOthers ? [...openItems, ...oldItems] : openItems;
+        .filter((request) => requestVisibleToCurrentUser(request))
+        .filter((request) => request.status === 'open')
+        .sort(byRequestDateAsc);
     const usersByUid = userMap();
 
     othersRequestsList.innerHTML = '';
-    visible.forEach((request) => othersRequestsList.appendChild(makeRequestRow(request, usersByUid)));
+    visible.forEach((request) => othersRequestsList.appendChild(makeRequestRow(request, usersByUid, 'others')));
     if (visible.length === 0) {
         othersRequestsList.innerHTML = '<p class="empty-state">No open club requests yet.</p>';
     }
-    btnToggleOthersOld.textContent = state.showOldOthers ? 'Hide older requests' : 'Show older requests';
 }
 
 function renderUpcomingBabysits() {
@@ -828,7 +907,7 @@ function renderUpcomingBabysits() {
     upcomingList.hidden = false;
     const usersByUid = userMap();
     upcoming.forEach((request) => {
-        upcomingList.appendChild(makeRequestRow(request, usersByUid));
+        upcomingList.appendChild(makeRequestRow(request, usersByUid, 'upcoming'));
     });
 }
 
@@ -1030,6 +1109,62 @@ function renderAdminSection() {
     });
 }
 
+function buildInviteLink() {
+    const uid = state.currentUser?.uid || '';
+    return `${window.location.origin}${window.location.pathname}?inviteFrom=${uid}`;
+}
+
+// When someone opens a shared invite link, send a connection request back to the
+// inviter so they can accept it from "Invites waiting for me".
+async function processInviteLink() {
+    if (!state.currentUser) {
+        return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    const fromUid = params.get('inviteFrom');
+    if (!fromUid) {
+        return;
+    }
+    const clearParam = () => {
+        params.delete('inviteFrom');
+        const queryString = params.toString();
+        window.history.replaceState({}, '', `${window.location.pathname}${queryString ? `?${queryString}` : ''}`);
+    };
+
+    if (fromUid === state.currentUser.uid) {
+        clearParam();
+        return;
+    }
+    const myClub = new Set(state.currentProfile?.clubMemberUids || []);
+    if (myClub.has(fromUid)) {
+        authStatus.textContent = 'You are already connected with the person who invited you.';
+        clearParam();
+        return;
+    }
+    const alreadyPending = state.outgoingClubInvites.some((invite) => invite.toUid === fromUid)
+        || state.clubInvites.some((invite) => invite.fromUid === fromUid);
+    if (alreadyPending) {
+        authStatus.textContent = 'A connection request with your inviter is already pending.';
+        clearParam();
+        return;
+    }
+
+    try {
+        await addDoc(collection(db, 'clubInvites'), {
+            fromUid: state.currentUser.uid,
+            toUid: fromUid,
+            status: 'pending',
+            createdAt: serverTimestamp(),
+        });
+        authStatus.textContent = 'Connection request sent to the person who invited you — they just need to accept it.';
+        clearParam();
+        await refreshAndRender();
+    } catch (err) {
+        console.error('Failed to process invite link:', err);
+        clearParam();
+    }
+}
+
 function buildAddPeopleModal() {
     const myClub = new Set(state.currentProfile?.clubMemberUids || []);
     const myClubArray = [...myClub];
@@ -1045,22 +1180,36 @@ function buildAddPeopleModal() {
         })
         .sort((a, b) => b.score - a.score || (a.user.displayName || '').localeCompare(b.user.displayName || ''));
 
+    addPeopleList.className = 'people-circle-grid';
     addPeopleList.innerHTML = '';
-    candidates.forEach(({ user, score }) => {
-        const row = document.createElement('div');
-        row.className = 'invite-row';
+    candidates.forEach(({ user }) => {
         const isPending = pendingTo.has(user.uid);
-        row.innerHTML = `
-            <span>${user.displayName || user.email} <span class="muted small">(${score} shared club links)</span></span>
-            <button type="button" class="btn btn-ghost btn-small" data-send-club="${user.uid}" ${isPending ? 'disabled' : ''}>
-                ${isPending ? 'Invite pending' : 'Invite'}
-            </button>
+        const photo = user.photoURL || '';
+        const initials = (user.displayName || user.email || '?').trim().charAt(0).toUpperCase();
+        const avatarStyle = photo ? ` style="background-image:url('${photo}')"` : '';
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = `person-circle${isPending ? ' is-pending' : ''}`;
+        item.disabled = isPending;
+        item.title = isPending
+            ? `Invite already sent to ${user.displayName || user.email}`
+            : `Invite ${user.displayName || user.email} to your club`;
+        if (!isPending) {
+            item.dataset.sendClub = user.uid;
+        }
+        item.innerHTML = `
+            <span class="person-circle-avatar-wrap">
+                <span class="person-circle-avatar"${avatarStyle}>${photo ? '' : initials}</span>
+                <span class="person-circle-badge">${isPending ? '\u2713' : '+'}</span>
+            </span>
+            <span class="person-circle-name">${firstName(user.displayName) || user.email}</span>
         `;
-        addPeopleList.appendChild(row);
+        addPeopleList.appendChild(item);
     });
 
     if (candidates.length === 0) {
-        addPeopleList.innerHTML = '<p class="empty-state">Everyone currently in the system is already in your club.</p>';
+        addPeopleList.className = 'list-stack';
+        addPeopleList.innerHTML = '<p class="empty-state">No one new to add right now. Use the invite link below.</p>';
     }
 }
 
@@ -1157,51 +1306,45 @@ function getAssignableHouseholdsForRequest(request) {
     return groupUidsByHousehold(candidateUids, usersByUid);
 }
 
-function buildFilledByOptions(householdGroups, selectedUid = '') {
-    const options = ['<option value="">Not filled</option>'];
-    householdGroups.forEach((group) => {
-        const selected = group.uids.includes(selectedUid) ? 'selected' : '';
+// Fill picker options: club households plus a manual "Someone else" entry.
+// There is no empty option — the Not filled / Filled toggle controls that.
+function buildFillPersonOptions(groups, selectedUid = '', selectedOther = false) {
+    const options = [];
+    groups.forEach((group) => {
+        const selected = (!selectedOther && selectedUid && group.uids.includes(selectedUid)) ? 'selected' : '';
         options.push(`<option value="${group.primaryUid}" ${selected}>${group.label}</option>`);
     });
+    options.push(`<option value="__other__" ${selectedOther ? 'selected' : ''}>Someone else</option>`);
     return options.join('');
 }
 
-function addEditOrDateRow(dateValue, timeValue = '18:00', acceptedByUid = '', assignableUsers = []) {
-    const idx = editOrDatesList.querySelectorAll('[data-edit-or-date]').length + 1;
+function createDateRow({ date = '', time = '18:00', acceptedByUid = '', acceptedOther = false } = {}) {
     const minDate = toDateInputValue(new Date());
     const row = document.createElement('div');
     row.className = 'inline-date-row';
-    row.dataset.editRow = '';
-    row.dataset.editOrDate = String(idx);
+    row.dataset.row = '';
     row.innerHTML = `
-        <div class="date-click-target"><input type="date" value="${dateValue}" min="${minDate}" /></div>
-        <select>${buildTimeOptions(timeValue)}</select>
+        <div class="date-click-target"><input class="row-date" type="date" value="${date}" min="${minDate}" required /></div>
+        <select class="row-time" required>${buildTimeOptions(time || '18:00')}</select>
         <button type="button" class="btn btn-ghost btn-small fill-toggle" data-fill-toggle>Not filled</button>
-        <select class="fill-person edit-filled-by" hidden>${buildFilledByOptions(assignableUsers, acceptedByUid || '')}</select>
-        <button type="button" class="row-remove" data-remove-edit-or-date="${idx}" aria-label="Remove this date" title="Remove">&times;</button>
+        <select class="fill-person" hidden>${buildFillPersonOptions(currentFormAssignable, acceptedByUid, acceptedOther)}</select>
+        <button type="button" class="row-remove" data-remove-row aria-label="Remove this date" title="Remove">&times;</button>
     `;
-    editOrDatesList.appendChild(row);
-    refreshPrimaryDateRemoveButtons();
+    return row;
 }
 
-function allEditDateRows() {
-    const rows = [];
-    const primaryRow = editRequestForm?.querySelector('[data-edit-primary-row]');
-    if (primaryRow) {
-        rows.push(primaryRow);
-    }
-    rows.push(...editOrDatesList.querySelectorAll('[data-edit-or-date]'));
-    return rows;
+function allDateRows() {
+    return Array.from(dateRowsList.querySelectorAll('.inline-date-row[data-row]'));
 }
 
-function getEditFilledRow() {
-    return allEditDateRows().find((row) => (
+function getFilledRow() {
+    return allDateRows().find((row) => (
         row.querySelector('[data-fill-toggle]')?.classList.contains('is-filled')
     )) || null;
 }
 
-function applyEditFillState(filledRow) {
-    allEditDateRows().forEach((row) => {
+function applyFillState(filledRow) {
+    allDateRows().forEach((row) => {
         const toggle = row.querySelector('[data-fill-toggle]');
         const person = row.querySelector('.fill-person');
         const isFilled = filledRow === row;
@@ -1214,22 +1357,16 @@ function applyEditFillState(filledRow) {
         }
         if (person) {
             person.hidden = !isFilled;
-            if (!isFilled) {
-                person.value = '';
-            } else if (!person.value) {
-                const firstReal = Array.from(person.options).find((opt) => opt.value);
-                if (firstReal) {
-                    person.value = firstReal.value;
-                }
-            }
         }
-        row.querySelectorAll('input[type="date"], select:not(.fill-person), [data-remove-edit-or-date], #btn-edit-remove-primary-date').forEach((el) => {
+        // Dim the date/time of other rows, but keep the X usable so OR options
+        // can still be deleted even when one date is already filled.
+        row.querySelectorAll('.row-date, .row-time').forEach((el) => {
             el.disabled = isDimmed;
         });
     });
 }
 
-function toggleEditFillRow(row) {
+function toggleFillRow(row) {
     if (!row) {
         return;
     }
@@ -1237,46 +1374,123 @@ function toggleEditFillRow(row) {
     if (!toggle) {
         return;
     }
-    applyEditFillState(toggle.classList.contains('is-filled') ? null : row);
+    applyFillState(toggle.classList.contains('is-filled') ? null : row);
 }
 
-function openEditRequestModal(request) {
-    if (!request || !editRequestForm) {
+function refreshRemoveButtons() {
+    const rows = allDateRows();
+    const onlyOne = rows.length <= 1;
+    rows.forEach((row) => {
+        const removeBtn = row.querySelector('[data-remove-row]');
+        if (removeBtn) {
+            removeBtn.hidden = onlyOne;
+        }
+    });
+}
+
+function addOrDateRow() {
+    if (allDateRows().length >= 5) {
+        authStatus.textContent = 'You can keep up to 5 date options.';
         return;
     }
-    const grouped = getGroupedRequests(request);
-    const primary = grouped[0] || request;
-    const assignableUsers = getAssignableHouseholdsForRequest(request);
-    const { date, time } = splitIsoToDateTime(primary.whenISO);
-    editRequestId.value = request.id;
-    editRequestDate.value = date;
-    editRequestTime.innerHTML = buildTimeOptions(time || '18:00');
-    editRequestFilledBy.innerHTML = buildFilledByOptions(assignableUsers, primary.acceptedByUid || '');
-    editRequestDetails.value = request.details || '';
-    editRequestKidCount.value = String(request.kidCount || 1);
-    editOrDatesList.innerHTML = '';
+    dateRowsList.appendChild(createDateRow({ date: toDateInputValue(getNextFridayDate()), time: '18:00' }));
+    refreshRemoveButtons();
+    applyFillState(getFilledRow());
+}
 
-    const orItems = grouped.slice(1);
-    orItems.forEach((item) => {
-        const split = splitIsoToDateTime(item.whenISO);
-        addEditOrDateRow(split.date, split.time || '18:00', item.acceptedByUid || '', assignableUsers);
-    });
-
-    refreshPrimaryDateRemoveButtons();
-
-    let filledRow = null;
-    if (primary.acceptedByUid) {
-        filledRow = editRequestForm.querySelector('[data-edit-primary-row]');
-    } else {
-        const orRows = Array.from(editOrDatesList.querySelectorAll('[data-edit-or-date]'));
-        const filledIdx = orItems.findIndex((item) => Boolean(item.acceptedByUid));
-        if (filledIdx >= 0) {
-            filledRow = orRows[filledIdx] || null;
-        }
+// Single entry point for both creating and editing a request.
+function openRequestForm(request = null) {
+    if (!requestForm) {
+        return;
     }
-    applyEditFillState(filledRow);
+    const isEdit = Boolean(request);
+    requestForm.dataset.mode = isEdit ? 'edit' : 'create';
+    requestFormTitle.textContent = isEdit ? 'Edit request' : 'Create new request';
+    btnRequestSubmit.textContent = isEdit ? 'Save changes' : 'Create request';
+    btnRequestDelete.hidden = !isEdit;
+    requestFormId.value = isEdit ? request.id : '';
+    currentFormAssignable = getAssignableHouseholdsForRequest(isEdit ? request : { visibility: 'all' });
 
-    openModal(editRequestModal);
+    dateRowsList.innerHTML = '';
+    let filledRow = null;
+
+    if (isEdit) {
+        const grouped = getGroupedRequests(request);
+        requestFormDetails.value = request.details || '';
+        grouped.forEach((item) => {
+            const { date, time } = splitIsoToDateTime(item.whenISO);
+            const row = createDateRow({
+                date,
+                time: time || '18:00',
+                acceptedByUid: item.acceptedByUid || '',
+                acceptedOther: Boolean(item.acceptedOther),
+            });
+            dateRowsList.appendChild(row);
+        });
+        const rows = allDateRows();
+        grouped.forEach((item, idx) => {
+            if (item.acceptedByUid || item.acceptedOther) {
+                filledRow = rows[idx] || filledRow;
+            }
+        });
+        const audience = request.visibility === 'subset' ? 'subset' : 'all';
+        requestFormAudience.value = audience;
+        buildAudienceList(requestFormAudienceList, 'subsetUid', request.visibilityUids || []);
+        requestFormAudienceList.hidden = audience !== 'subset';
+    } else {
+        requestFormDetails.value = '';
+        dateRowsList.appendChild(createDateRow({ date: toDateInputValue(getNextFridayDate()), time: '18:00' }));
+        requestFormAudience.value = 'all';
+        buildAudienceList(requestFormAudienceList, 'subsetUid', []);
+        requestFormAudienceList.hidden = true;
+    }
+
+    refreshRemoveButtons();
+    applyFillState(filledRow);
+    openModal(requestFormModal);
+}
+
+function randomGroupId() {
+    return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+// Reads every date row in the request form into a de-duped, date-sorted list of
+// { whenISO, acceptedByUid, acceptedOther } options.
+function gatherFormOptions() {
+    const seen = new Map();
+    allDateRows().forEach((row) => {
+        const dateInput = row.querySelector('.row-date');
+        const timeSelect = row.querySelector('.row-time');
+        const whenISO = combineDateAndTime(dateInput?.value || '', timeSelect?.value || '');
+        if (!whenISO || seen.has(whenISO)) {
+            return;
+        }
+        const filled = row.querySelector('[data-fill-toggle]')?.classList.contains('is-filled');
+        let acceptedByUid = '';
+        let acceptedOther = false;
+        if (filled) {
+            const personVal = row.querySelector('.fill-person')?.value || '';
+            if (personVal === '__other__') {
+                acceptedOther = true;
+            } else if (personVal) {
+                acceptedByUid = personVal;
+            }
+        }
+        seen.set(whenISO, { whenISO, acceptedByUid, acceptedOther });
+    });
+    return [...seen.values()].sort((a, b) => byRequestDateAsc(a, b));
+}
+
+function readFormAudience() {
+    const audience = requestFormAudience.value === 'subset' ? 'subset' : 'all';
+    const subsetUids = audience === 'subset'
+        ? [...new Set(
+            Array.from(requestForm.querySelectorAll('input[name="subsetUid"]:checked'))
+                .flatMap((el) => String(el.value).split(','))
+                .filter(Boolean),
+        )]
+        : [];
+    return { audience, subsetUids };
 }
 
 function openAssignRequestModal(request) {
@@ -1299,120 +1513,36 @@ function openAssignRequestModal(request) {
     openModal(assignRequestModal);
 }
 
-function addOrDateInput() {
-    const currentCount = Number(orDateCount.value);
-    if (currentCount >= 5) {
-        authStatus.textContent = 'You can add up to 5 date options.';
+function buildAudienceList(listEl, inputName, selectedUids = []) {
+    if (!listEl) {
         return;
     }
-    const nextIndex = currentCount + 1;
-    const defaultDate = getNextFridayDate();
-    const row = document.createElement('div');
-    row.className = 'inline-date-row';
-    const minDate = toDateInputValue(new Date());
-    row.innerHTML = `
-        <div class="date-click-target"><input type="date" name="orDate${nextIndex}" value="${toDateInputValue(defaultDate)}" min="${minDate}" /></div>
-        <select name="orTime${nextIndex}">${buildTimeOptions('18:00')}</select>
-        <button type="button" class="row-remove" data-remove-or-date="${nextIndex}" aria-label="Remove this date" title="Remove">&times;</button>
-    `;
-    row.dataset.orDate = String(nextIndex);
-    orDatesList.appendChild(row);
-    orDateCount.value = String(nextIndex);
-    refreshPrimaryDateRemoveButtons();
-}
-
-function rebuildOrDateCount() {
-    const total = 1 + orDatesList.querySelectorAll('[data-or-date]').length;
-    orDateCount.value = String(total);
-}
-
-function refreshPrimaryDateRemoveButtons() {
-    const newHasExtras = orDatesList.querySelectorAll('[data-or-date]').length > 0;
-    const editHasExtras = editOrDatesList.querySelectorAll('[data-edit-or-date]').length > 0;
-    if (btnNewRemovePrimaryDate) {
-        btnNewRemovePrimaryDate.hidden = !newHasExtras;
-    }
-    if (btnEditRemovePrimaryDate) {
-        btnEditRemovePrimaryDate.hidden = !editHasExtras;
-    }
-}
-
-function promoteFirstNewOrDateToPrimary() {
-    const first = orDatesList.querySelector('[data-or-date]');
-    if (!first) {
-        return;
-    }
-    const dateInput = first.querySelector('input[type="date"]');
-    const timeSelect = first.querySelector('select');
-    if (newRequestDate && dateInput) {
-        newRequestDate.value = dateInput.value;
-    }
-    if (newRequestTime && timeSelect) {
-        newRequestTime.value = timeSelect.value;
-    }
-    first.remove();
-    rebuildOrDateCount();
-    refreshPrimaryDateRemoveButtons();
-}
-
-function promoteFirstEditOrDateToPrimary() {
-    const first = editOrDatesList.querySelector('[data-edit-or-date]');
-    if (!first) {
-        return;
-    }
-    const dateInput = first.querySelector('input[type="date"]');
-    const timeSelect = first.querySelector('select:not(.fill-person)');
-    const filledBySelect = first.querySelector('select.fill-person');
-    const firstWasFilled = first.querySelector('[data-fill-toggle]')?.classList.contains('is-filled');
-    const primaryRow = editRequestForm?.querySelector('[data-edit-primary-row]');
-    const primaryWasFilled = primaryRow?.querySelector('[data-fill-toggle]')?.classList.contains('is-filled');
-    if (editRequestDate && dateInput) {
-        editRequestDate.value = dateInput.value;
-    }
-    if (editRequestTime && timeSelect) {
-        editRequestTime.value = timeSelect.value;
-    }
-    if (editRequestFilledBy && filledBySelect) {
-        editRequestFilledBy.value = filledBySelect.value;
-    }
-    first.remove();
-    refreshPrimaryDateRemoveButtons();
-    if (primaryWasFilled || firstWasFilled) {
-        applyEditFillState(primaryRow || null);
-    } else {
-        applyEditFillState(getEditFilledRow());
-    }
-}
-
-function buildSubsetAudienceList() {
-    subsetAudienceList.innerHTML = '';
+    listEl.innerHTML = '';
     const clubSet = new Set(state.currentProfile?.clubMemberUids || []);
     const usersByUid = userMap();
     const candidateUids = [...clubSet].filter((uid) => !isMine(uid));
     const groups = groupUidsByHousehold(candidateUids, usersByUid);
+    const selectedSet = new Set(selectedUids);
     groups.forEach((group) => {
-        const row = document.createElement('label');
-        row.className = 'radio-line';
-        row.innerHTML = `
-            <input type="checkbox" name="subsetUid" value="${group.uids.join(',')}" />
-            ${group.label}
+        const checked = group.uids.some((uid) => selectedSet.has(uid)) ? 'checked' : '';
+        const primaryUser = usersByUid.get(group.primaryUid);
+        const photo = primaryUser?.photoURL || '';
+        const initials = (group.label || '?').trim().charAt(0).toUpperCase();
+        const avatarStyle = photo ? ` style="background-image:url('${photo}')"` : '';
+        const chip = document.createElement('label');
+        chip.className = 'audience-chip';
+        chip.innerHTML = `
+            <input type="checkbox" name="${inputName}" value="${group.uids.join(',')}" ${checked} />
+            <span class="audience-chip-avatar-wrap">
+                <span class="audience-chip-avatar"${avatarStyle}>${photo ? '' : initials}</span>
+                <span class="audience-chip-check" aria-hidden="true">&check;</span>
+            </span>
+            <span class="audience-chip-name">${group.label}</span>
         `;
-        subsetAudienceList.appendChild(row);
+        listEl.appendChild(chip);
     });
-    if (!subsetAudienceList.children.length) {
-        subsetAudienceList.innerHTML = '<p class="empty-state">No club members available yet.</p>';
-    }
-}
-
-function resetRequestDateDefaults() {
-    const nextFriday = getNextFridayDate();
-    const todayValue = toDateInputValue(new Date());
-    if (newRequestDate) {
-        newRequestDate.min = todayValue;
-        newRequestDate.value = toDateInputValue(nextFriday);
-    }
-    if (newRequestTime) {
-        newRequestTime.innerHTML = buildTimeOptions('18:00');
+    if (!listEl.children.length) {
+        listEl.innerHTML = '<p class="empty-state">No club members available yet.</p>';
     }
 }
 
@@ -1466,6 +1596,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.error('Failed to load app data:', err);
                     authStatus.textContent = 'Signed in, but some data failed to load. Please refresh.';
                 }
+
+                try {
+                    await processInviteLink();
+                } catch (err) {
+                    console.error('Failed to process invite link:', err);
+                }
             }
 
             showSignedIn(user, { preserveStatus: authStatus.textContent.length > 0 });
@@ -1506,30 +1642,30 @@ document.addEventListener('DOMContentLoaded', () => {
         renderMyRequests();
     });
 
-    bindClick(btnToggleOthersOld, () => {
-        state.showOldOthers = !state.showOldOthers;
-        renderOthersRequests();
-    });
-
     bindClick(btnNewRequest, () => {
-        if (newRequestForm) {
-            newRequestForm.reset();
-        }
-        orDatesList.innerHTML = '';
-        orDateCount.value = '1';
-        resetRequestDateDefaults();
-        kidOptions.forEach((btn, index) => {
-            btn.classList.toggle('is-active', index === 0);
-        });
-        newRequestKidCount.value = '1';
-        buildSubsetAudienceList();
-        subsetAudienceList.hidden = true;
-        refreshPrimaryDateRemoveButtons();
-        openModal(newRequestModal);
+        openRequestForm(null);
     });
     bindClick(btnAddPeople, () => {
         buildAddPeopleModal();
+        if (inviteLinkInput) {
+            inviteLinkInput.value = buildInviteLink();
+        }
         openModal(addPeopleModal);
+    });
+
+    bindClick(btnCopyInviteLink, async () => {
+        const link = buildInviteLink();
+        if (inviteLinkInput) {
+            inviteLinkInput.value = link;
+            inviteLinkInput.select();
+        }
+        try {
+            await navigator.clipboard.writeText(link);
+            btnCopyInviteLink.textContent = 'Copied!';
+            setTimeout(() => { btnCopyInviteLink.textContent = 'Copy'; }, 1500);
+        } catch (err) {
+            authStatus.textContent = `Could not copy automatically. Copy this link: ${link}`;
+        }
     });
     bindClick(btnHouseholdAction, () => {
         if (state.currentProfile?.householdPartnerUid) {
@@ -1539,44 +1675,14 @@ document.addEventListener('DOMContentLoaded', () => {
         openModal(householdModal);
     });
 
-    bindClick(btnInviteLink, async () => {
-        const inviteUrl = `${window.location.origin}${window.location.pathname}?inviteFrom=${state.currentUser.uid}`;
-        try {
-            await navigator.clipboard.writeText(inviteUrl);
-            authStatus.textContent = 'Invite link copied. Share it anywhere you want.';
-        } catch (err) {
-            authStatus.textContent = `Could not copy link. Use this manually: ${inviteUrl}`;
-        }
-    });
-
     bindClick(btnAddOrDate, () => {
-        addOrDateInput();
+        addOrDateRow();
     });
 
-    bindClick(btnNewRemovePrimaryDate, () => {
-        promoteFirstNewOrDateToPrimary();
-    });
-
-    bindClick(btnEditAddOrDate, () => {
-        const request = getRequestById(editRequestId.value);
-        const assignableUsers = request ? getAssignableHouseholdsForRequest(request) : [];
-        const currentCount = 1 + editOrDatesList.querySelectorAll('[data-edit-or-date]').length;
-        if (currentCount >= 5) {
-            authStatus.textContent = 'You can keep up to 5 date options.';
-            return;
-        }
-        addEditOrDateRow(toDateInputValue(getNextFridayDate()), '18:00', '', assignableUsers);
-        applyEditFillState(getEditFilledRow());
-    });
-
-    bindClick(btnEditRemovePrimaryDate, () => {
-        promoteFirstEditOrDateToPrimary();
-    });
-
-    bindClick(btnEditDeleteRequest, async () => {
-        const request = getRequestById(editRequestId.value);
+    bindClick(btnRequestDelete, async () => {
+        const request = getRequestById(requestFormId.value);
         if (!request) {
-            closeModal('edit-request-modal');
+            closeModal('request-form-modal');
             return;
         }
         const deleteWholeGroup = request.groupId && Number(request.groupSize || 0) > 1;
@@ -1593,197 +1699,114 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             await deleteDoc(doc(db, 'requests', request.id));
         }
-        closeModal('edit-request-modal');
+        closeModal('request-form-modal');
         await refreshAndRender();
     });
 
-    kidOptions.forEach((btn) => {
-        btn.addEventListener('click', () => {
-            const value = btn.dataset.kidCount || '1';
-            newRequestKidCount.value = value;
-            kidOptions.forEach((option) => option.classList.remove('is-active'));
-            btn.classList.add('is-active');
-        });
-    });
-
-    if (newRequestForm) {
-        newRequestForm.addEventListener('change', (event) => {
+    if (requestForm) {
+        requestForm.addEventListener('change', (event) => {
             const target = event.target;
-            if (!(target instanceof HTMLInputElement)) {
-                return;
-            }
-            if (target.name === 'requestAudience') {
-                subsetAudienceList.hidden = target.value !== 'subset';
+            if (target && target.name === 'audience') {
+                requestFormAudienceList.hidden = target.value !== 'subset';
             }
         });
-    }
 
-    if (newRequestForm) {
-        newRequestForm.addEventListener('submit', async (event) => {
+        requestForm.addEventListener('submit', async (event) => {
             event.preventDefault();
-            const form = new FormData(newRequestForm);
-            const whenValues = [];
-            const primaryWhen = combineDateAndTime(String(form.get('date') || ''), String(form.get('time') || ''));
-            if (primaryWhen) {
-                whenValues.push(primaryWhen);
-            }
-            orDatesList.querySelectorAll('[data-or-date]').forEach((row) => {
-                const dateInput = row.querySelector('input[type="date"]');
-                const timeSelect = row.querySelector('select');
-                const when = combineDateAndTime(dateInput?.value || '', timeSelect?.value || '');
-                if (when) {
-                    whenValues.push(when);
-                }
-            });
-            const uniqueDates = [...new Set(whenValues)];
-            if (!uniqueDates.length) {
+            const normalizedOptions = gatherFormOptions();
+            if (!normalizedOptions.length) {
                 authStatus.textContent = 'Please choose at least one date and time.';
                 return;
             }
-            const audience = form.get('requestAudience') === 'subset' ? 'subset' : 'all';
-            const subsetUids = audience === 'subset'
-                ? [...new Set(
-                    Array.from(form.getAll('subsetUid'))
-                        .flatMap((value) => String(value).split(','))
-                        .filter(Boolean),
-                )]
-                : [];
-            const details = String(form.get('details') || '').trim();
-            const kidCount = Number(form.get('kidCount') || 1);
-            const requestTitle = `${kidCount} kid${kidCount > 1 ? 's' : ''} babysitting request`;
-            const groupId = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+            const details = requestFormDetails.value.trim();
+            const { audience, subsetUids } = readFormAudience();
+            const isEdit = Boolean(requestFormId.value);
 
-            const createDocs = uniqueDates.map((whenISO, index) => addDoc(collection(db, 'requests'), {
-                title: requestTitle,
-                details,
-                whenISO,
-                createdByUid: state.currentUser.uid,
-                createdByName: state.currentUser.displayName || state.currentUser.email || 'Unknown',
-                kidCount,
-                status: 'open',
-                visibility: audience,
-                visibilityUids: audience === 'subset' ? subsetUids : [],
-                groupId,
-                groupSize: uniqueDates.length,
-                groupIndex: index,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-                acceptedByUid: null,
-            }));
-            await Promise.all(createDocs);
-            closeModal('new-request-modal');
-            newRequestForm.reset();
-            orDatesList.innerHTML = '';
-            subsetAudienceList.hidden = true;
-            await refreshAndRender();
-        });
-    }
-
-    if (editRequestForm) {
-        editRequestForm.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            const request = getRequestById(editRequestId.value);
-            if (!request) {
-                closeModal('edit-request-modal');
-                return;
-            }
-            const baseGroup = getGroupedRequests(request);
-            const options = [{
-                whenISO: combineDateAndTime(editRequestDate.value, editRequestTime.value),
-                acceptedByUid: editRequestFilledBy?.value || '',
-            }];
-            editOrDatesList.querySelectorAll('[data-edit-or-date]').forEach((row) => {
-                const dateInput = row.querySelector('input[type="date"]');
-                const timeSelect = row.querySelector('select:not(.edit-filled-by)');
-                const filledBySelect = row.querySelector('select.edit-filled-by');
-                const whenISO = combineDateAndTime(dateInput?.value || '', timeSelect?.value || '');
-                if (whenISO) {
-                    options.push({
-                        whenISO,
-                        acceptedByUid: filledBySelect?.value || '',
-                    });
-                }
-            });
-            const uniqueOptionMap = new Map();
-            options.forEach((item) => {
-                if (!item.whenISO) {
-                    return;
-                }
-                uniqueOptionMap.set(item.whenISO, item);
-            });
-            const normalizedOptions = [...uniqueOptionMap.values()].sort((a, b) => byRequestDateAsc(a, b));
-
-            if (!normalizedOptions.length) {
-                authStatus.textContent = 'Please include at least one date option.';
-                return;
-            }
-
-            const kidCount = Number(editRequestKidCount.value || 1);
-            const details = editRequestDetails.value.trim();
-            const title = `${kidCount} kid${kidCount > 1 ? 's' : ''} babysitting request`;
-            const groupId = normalizedOptions.length > 1
-                ? (request.groupId || (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`))
-                : null;
-
-            const acceptedIndex = normalizedOptions.findIndex((item) => Boolean(item.acceptedByUid));
+            // Only one date in an OR group can be the filled one.
+            const acceptedIndex = normalizedOptions.findIndex((o) => o.acceptedByUid || o.acceptedOther);
             if (acceptedIndex >= 0) {
-                normalizedOptions.forEach((item, idx) => {
+                normalizedOptions.forEach((o, idx) => {
                     if (idx !== acceptedIndex) {
-                        item.acceptedByUid = '';
+                        o.acceptedByUid = '';
+                        o.acceptedOther = false;
                     }
                 });
             }
-            const shared = {
+
+            const existing = isEdit ? getRequestById(requestFormId.value) : null;
+            const groupId = normalizedOptions.length > 1
+                ? (existing?.groupId || randomGroupId())
+                : null;
+
+            const fillFields = (o) => ({
+                status: (o.acceptedByUid || o.acceptedOther)
+                    ? 'accepted'
+                    : (acceptedIndex >= 0 ? 'superseded' : 'open'),
+                acceptedByUid: o.acceptedByUid || null,
+                acceptedOther: Boolean(o.acceptedOther),
+                acceptedByName: o.acceptedOther ? 'Someone else' : null,
+            });
+            const sharedBase = {
                 details,
-                kidCount,
-                title,
-                visibility: request.visibility || 'all',
-                visibilityUids: request.visibilityUids || [],
+                title: 'Babysitting request',
+                visibility: audience,
+                visibilityUids: subsetUids,
                 updatedAt: serverTimestamp(),
             };
 
-            const keepDocs = baseGroup.slice(0, normalizedOptions.length);
-            const removeDocs = baseGroup.slice(normalizedOptions.length);
-            const addOptions = normalizedOptions.slice(baseGroup.length);
-
-            const batch = writeBatch(db);
-            keepDocs.forEach((docItem, idx) => {
-                const option = normalizedOptions[idx];
-                const isAccepted = Boolean(option.acceptedByUid);
-                batch.update(doc(db, 'requests', docItem.id), {
-                    ...shared,
-                    whenISO: option.whenISO,
+            if (!isEdit) {
+                await Promise.all(normalizedOptions.map((o, index) => addDoc(collection(db, 'requests'), {
+                    ...sharedBase,
+                    whenISO: o.whenISO,
+                    createdByUid: state.currentUser.uid,
+                    createdByName: state.currentUser.displayName || state.currentUser.email || 'Unknown',
                     groupId,
                     groupSize: normalizedOptions.length,
-                    groupIndex: idx,
-                    status: isAccepted ? 'accepted' : (acceptedIndex >= 0 ? 'superseded' : 'open'),
-                    acceptedByUid: option.acceptedByUid || null,
-                });
-            });
-            removeDocs.forEach((docItem) => {
-                batch.delete(doc(db, 'requests', docItem.id));
-            });
-            await batch.commit();
-
-            if (addOptions.length) {
-                await Promise.all(addOptions.map((option, idx) => {
-                    const isAccepted = Boolean(option.acceptedByUid);
-                    return addDoc(collection(db, 'requests'), {
-                    ...shared,
-                    whenISO: option.whenISO,
-                    createdByUid: request.createdByUid,
-                    createdByName: request.createdByName,
-                    status: isAccepted ? 'accepted' : (acceptedIndex >= 0 ? 'superseded' : 'open'),
-                    acceptedByUid: option.acceptedByUid || null,
-                    groupId,
-                    groupSize: normalizedOptions.length,
-                    groupIndex: baseGroup.length + idx,
+                    groupIndex: index,
                     createdAt: serverTimestamp(),
+                    ...fillFields(o),
+                })));
+            } else {
+                if (!existing) {
+                    closeModal('request-form-modal');
+                    return;
+                }
+                const baseGroup = getGroupedRequests(existing);
+                const keepDocs = baseGroup.slice(0, normalizedOptions.length);
+                const removeDocs = baseGroup.slice(normalizedOptions.length);
+                const addOptions = normalizedOptions.slice(baseGroup.length);
+
+                const batch = writeBatch(db);
+                keepDocs.forEach((docItem, idx) => {
+                    const o = normalizedOptions[idx];
+                    batch.update(doc(db, 'requests', docItem.id), {
+                        ...sharedBase,
+                        whenISO: o.whenISO,
+                        groupId,
+                        groupSize: normalizedOptions.length,
+                        groupIndex: idx,
+                        ...fillFields(o),
+                    });
                 });
-                }));
+                removeDocs.forEach((docItem) => batch.delete(doc(db, 'requests', docItem.id)));
+                await batch.commit();
+
+                if (addOptions.length) {
+                    await Promise.all(addOptions.map((o, idx) => addDoc(collection(db, 'requests'), {
+                        ...sharedBase,
+                        whenISO: o.whenISO,
+                        createdByUid: existing.createdByUid,
+                        createdByName: existing.createdByName,
+                        groupId,
+                        groupSize: normalizedOptions.length,
+                        groupIndex: baseGroup.length + idx,
+                        createdAt: serverTimestamp(),
+                        ...fillFields(o),
+                    })));
+                }
             }
 
-            closeModal('edit-request-modal');
+            closeModal('request-form-modal');
             await refreshAndRender();
         });
     }
@@ -1874,9 +1897,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const fillToggle = target.closest('[data-fill-toggle]');
-        if (fillToggle && editRequestForm?.contains(fillToggle)) {
+        if (fillToggle && requestForm?.contains(fillToggle)) {
             if (!fillToggle.disabled) {
-                toggleEditFillRow(fillToggle.closest('.inline-date-row'));
+                toggleFillRow(fillToggle.closest('.inline-date-row'));
             }
             return;
         }
@@ -1887,24 +1910,13 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const removeOrDate = target.dataset.removeOrDate;
-        if (removeOrDate) {
-            const row = orDatesList.querySelector(`[data-or-date="${removeOrDate}"]`);
-            if (row) {
+        const removeRowBtn = target.closest('[data-remove-row]');
+        if (removeRowBtn && requestForm?.contains(removeRowBtn)) {
+            const row = removeRowBtn.closest('.inline-date-row');
+            if (row && allDateRows().length > 1) {
                 row.remove();
-                rebuildOrDateCount();
-                refreshPrimaryDateRemoveButtons();
-            }
-            return;
-        }
-
-        const removeEditOrDate = target.dataset.removeEditOrDate;
-        if (removeEditOrDate) {
-            const row = editOrDatesList.querySelector(`[data-edit-or-date="${removeEditOrDate}"]`);
-            if (row) {
-                row.remove();
-                refreshPrimaryDateRemoveButtons();
-                applyEditFillState(getEditFilledRow());
+                refreshRemoveButtons();
+                applyFillState(getFilledRow());
             }
             return;
         }
@@ -1960,7 +1972,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 authStatus.textContent = 'Invite already pending for this person.';
             }
             await refreshAndRender();
-            closeModal('add-people-modal');
+            buildAddPeopleModal();
             return;
         }
 

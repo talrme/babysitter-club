@@ -57,7 +57,9 @@ service cloud.firestore {
     }
 
     match /users/{userUid} {
-      allow read: if canReadUser(userUid);
+      // Any signed-in user can read profiles so people are discoverable to add
+      // to a club. Writes remain restricted to the owner (or an admin).
+      allow read: if isSignedIn();
       allow create: if isSignedIn() && request.auth.uid == userUid;
       allow update: if isSignedIn() && (request.auth.uid == userUid || isAdmin());
       allow delete: if isAdmin();
